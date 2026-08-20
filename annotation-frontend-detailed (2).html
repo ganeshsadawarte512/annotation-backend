@@ -1,0 +1,1142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Annotation</title>
+<style>
+  :root {
+    --navy: #16233f; --navy-light: #1e2f52; --accent-orange: #f4772e;
+    --border: #d9dee5; --row-alt: #f7f9fb; --text: #1b2430; --text-dim: #5b6472;
+    --link: #2563c9; --green-check: #1b7a3d;
+  }
+  * { box-sizing: border-box; }
+  html { scrollbar-gutter: stable; }
+  body { margin: 0; font-family: -apple-system, "Segoe UI", Arial, sans-serif; color: var(--text); background: #fff; font-size: 13px; }
+  .hidden { display: none !important; }
+
+  header.topbar { background: var(--navy); color: #fff; display: flex; align-items: center; justify-content: space-between; padding: 10px 20px; position: relative; }
+  .brand { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 18px; letter-spacing: 0.5px; }
+  .brand .dot { color: var(--accent-orange); }
+  .title { position: absolute; left: 50%; transform: translateX(-50%); font-size: 20px; font-weight: 700; letter-spacing: 1px; }
+  .topbar-right { display: flex; align-items: center; gap: 14px; font-size: 12px; color: #cfd8e8; }
+  .role-pill { background: var(--navy-light); border: 1px solid #4a597c; padding: 3px 10px; border-radius: 12px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .btn { background: transparent; border: 1px solid #4a597c; color: #fff; padding: 5px 14px; border-radius: 4px; font-size: 12px; cursor: pointer; }
+  .btn:hover { background: var(--navy-light); }
+  .btn-primary { background: var(--accent-orange); border: 1px solid var(--accent-orange); color: #fff; }
+  .btn-primary:hover { background: #d9631b; }
+
+  #view-login .login-wrap { display: flex; justify-content: center; align-items: center; min-height: 65vh; }
+  .login-box { display: flex; flex-direction: column; gap: 12px; width: 300px; }
+  .login-box input { border: 1px solid var(--border); border-radius: 4px; padding: 9px 10px; font-size: 13px; }
+  .login-box input:focus { outline: 2px solid var(--accent-orange); }
+  .login-box button { background: var(--link); color: #fff; border: none; padding: 9px 0; border-radius: 4px; font-size: 13px; font-weight: 600; cursor: pointer; margin-top: 4px; }
+  .login-box button:hover { background: #1c4a99; }
+  .login-box button:disabled { background: #9db3d8; cursor: wait; }
+  .login-error { color: #c0392b; font-size: 12px; min-height: 16px; }
+  .api-base-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px; }
+  .api-base-field label { font-size: 11px; color: var(--text-dim); font-weight: 600; }
+  .api-base-field input { font-size: 12px; color: var(--text-dim); }
+  .login-hint { text-align: center; color: var(--text-dim); font-size: 11px; margin-top: 6px; line-height: 1.6; }
+
+  .filterbar { display: flex; align-items: flex-end; gap: 22px; padding: 14px 20px; background: #fff; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 11px; color: var(--text-dim); font-weight: 600; }
+  .field input, .field select { border: 1px solid var(--border); border-radius: 4px; padding: 6px 8px; font-size: 13px; color: var(--text); height: 32px; box-sizing: border-box; }
+  .field input:focus { outline: 2px solid var(--accent-orange); }
+  .filterbar-spacer { flex: 1; }
+
+  .table-wrap { overflow: auto; max-height: 74vh; border-top: 1px solid var(--border); }
+  table { border-collapse: collapse; width: 100%; min-width: 1200px; }
+  thead th { position: sticky; top: 0; background: #eef1f5; border-bottom: 2px solid var(--border); border-right: 1px solid var(--border); padding: 8px 10px; text-align: left; font-size: 11px; font-weight: 700; color: #3a4454; white-space: nowrap; }
+  tbody td { padding: 6px 10px; border-bottom: 1px solid var(--border); border-right: 1px solid #eceff3; white-space: nowrap; }
+  tbody tr:nth-child(even) { background: var(--row-alt); }
+  tbody tr:hover { background: #eef4fc; }
+  .poss-btn { background: var(--accent-orange); border: 1px solid var(--accent-orange); color: #fff; border-radius: 3px; padding: 3px 12px; font-size: 12px; cursor: pointer; font-weight: 600; }
+  .poss-btn:hover { background: #d9631b; }
+  .gameid { font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px; color: var(--text-dim); }
+  .notes-received { color: #1b7a3d; }
+  .notes-flag { color: #b34700; }
+  .rowcount { padding: 8px 20px; font-size: 12px; color: var(--text-dim); border-top: 1px solid var(--border); display:flex; justify-content: space-between; align-items:center; }
+  .locked-note { font-size: 11px; color: var(--text-dim); font-style: italic; }
+  .status-banner { padding: 8px 20px; font-size: 12px; }
+  .status-banner.error { background: #fde3e0; color: #b0392b; }
+  .status-banner.loading { background: #eef4fc; color: var(--link); }
+
+  .notes-input { border: 1px solid var(--border); border-radius: 3px; padding: 3px 6px; font-size: 12px; width: 100%; min-width: 160px; }
+  .notes-input.received { color: #1b7a3d; }
+  .notes-input.flag { color: #b34700; }
+  .video-cell-upload { font-size: 11px; color: var(--link); text-decoration: underline; cursor: pointer; }
+  .dash-check { cursor: pointer; }
+  .dash-check:disabled { cursor: not-allowed; opacity: 0.6; }
+  .user-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--border); font-size: 12px; }
+  .user-row:last-child { border-bottom: none; }
+  .user-row .u-role { color: var(--text-dim); font-size: 11px; }
+  .user-row .u-del { color: #b0392b; cursor: pointer; font-size: 11px; text-decoration: underline; }
+
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(20,25,40,0.45); display: flex; align-items: center; justify-content: center; z-index: 50; }
+  .modal { background: #fff; border-radius: 6px; width: 380px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.25); }
+  .modal h3 { margin: 0 0 14px 0; font-size: 15px; }
+  .modal .field { margin-bottom: 10px; }
+  .modal .field input, .modal .field select { width: 100%; }
+  .modal-error { color: #c0392b; font-size: 12px; min-height: 16px; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+  .modal-actions button { padding: 7px 16px; border-radius: 4px; font-size: 12px; cursor: pointer; border: 1px solid var(--border); background: #fff; }
+  .modal-actions .save { background: var(--link); color: #fff; border-color: var(--link); }
+
+  /* ===== DETAILED ANNOTATION VIEW ===== */
+  .ann2-topbar { display: flex; align-items: center; gap: 16px; padding: 10px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .ann2-topbar .back-btn { background: var(--navy); color: #fff; border: none; padding: 6px 14px; border-radius: 4px; font-size: 12px; cursor: pointer; }
+  .ann2-topbar .gid-field { display: flex; align-items: center; gap: 6px; }
+  .ann2-topbar .gid-field label { font-size: 11px; color: var(--text-dim); font-weight: 700; }
+  .ann2-topbar .gid-field input { border: 1px solid var(--border); border-radius: 4px; padding: 5px 8px; font-size: 11px; width: 210px; color: var(--text-dim); }
+  .ann2-status { padding: 4px 16px; }
+
+  .ann2-wrap { display: flex; align-items: flex-start; }
+  .ann2-left { width: 280px; border-right: 1px solid var(--border); flex-shrink: 0; }
+  .ann2-left-header { background: #d8dde3; padding: 8px 10px; font-weight: 700; font-size: 13px; }
+  .ann2-list { max-height: 78vh; overflow-y: auto; }
+  .ann2-list-head { display: grid; grid-template-columns: 1fr 1fr 1fr; font-size: 10px; font-weight: 700; color: var(--text-dim); padding: 6px 10px; border-bottom: 1px solid var(--border); }
+  .ann2-row { display: grid; grid-template-columns: 1fr 1fr 1fr; padding: 6px 10px; border-bottom: 1px solid #eceff3; cursor: pointer; font-size: 11px; }
+  .ann2-row:hover { background: #eef4fc; }
+  .ann2-row.selected { background: #dfeaff; }
+  .ann2-row .summary { grid-column: 1 / -1; color: var(--link); font-size: 10.5px; margin-top: 2px; line-height: 1.5; }
+  .ann2-new-row { text-align: center; padding: 10px; color: var(--link); cursor: pointer; font-size: 12px; text-decoration: underline; }
+
+  .ann2-right { flex: 1; padding: 16px 20px; }
+  .ann2-save-row { text-align: center; margin-bottom: 16px; }
+  .ann2-save-row button { background: var(--navy); color: #fff; border: none; padding: 8px 30px; border-radius: 4px; font-weight: 700; font-size: 13px; cursor: pointer; }
+  .ann2-save-row button:hover { background: var(--navy-light); }
+  .ann2-save-row .del { background: #b0392b; margin-left: 8px; }
+  .ann2-save-row .del:hover { background: #922e21; }
+
+  .ann2-formrow { display: grid; grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)); gap: 16px 14px; margin-bottom: 16px; align-items: end; }
+  .ann2-formrow .field input, .ann2-formrow .field select { width: 100%; min-width: 0; }
+  .ann2-radio-field { display: flex; flex-direction: column; gap: 6px; justify-self: start; }
+  .ann2-radio-field label.radio-title { font-size: 11px; color: var(--text-dim); font-weight: 600; white-space: nowrap; }
+  .ann2-radio-group { display: flex; gap: 10px; align-items: center; font-size: 12px; white-space: nowrap; height: 32px; }
+  .ann2-formrow .field { min-width: 0; }
+  .ann2-formrow .clip-btn { align-self: end; height: 32px; white-space: nowrap; }
+  .clip-btn { background: var(--navy); color: #fff; border: none; padding: 7px 16px; border-radius: 4px; font-size: 12px; cursor: pointer; align-self: flex-end; }
+
+  .ann2-roster-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+  .roster-panel { border: 1px solid var(--border); border-radius: 4px; }
+  .roster-panel-head { font-size: 11px; font-weight: 700; padding: 6px 8px; border-bottom: 1px solid var(--border); background: var(--row-alt); }
+  .roster-panel-body { max-height: 150px; overflow-y: auto; padding: 4px 8px; }
+  .roster-row { display: flex; align-items: center; gap: 6px; padding: 3px 0; font-size: 12px; }
+  .roster-row input[type=checkbox] { cursor: pointer; }
+  .roster-row .rm-player { margin-left: auto; color: #b0392b; font-size: 10px; cursor: pointer; text-decoration: underline; }
+  .add-player-row { display: flex; gap: 4px; padding: 6px 8px; border-top: 1px solid var(--border); }
+  .add-player-row input { flex: 1; min-width: 0; border: 1px solid var(--border); border-radius: 3px; padding: 3px 5px; font-size: 11px; }
+  .add-player-row input.num-input { flex: 0 0 40px; }
+  .add-player-row button { background: var(--link); color: #fff; border: none; border-radius: 3px; padding: 3px 8px; font-size: 11px; cursor: pointer; }
+
+  .ann2-bottom { display: flex; gap: 20px; flex-wrap: wrap; }
+  .ballscreen-panel { flex: 0; min-width: 420px; border: 1px solid var(--border); border-radius: 4px; padding: 10px; }
+  .ballscreen-list { min-height: 90px; border: 1px solid var(--border); border-radius: 4px; padding: 8px; margin-bottom: 8px; max-height: 130px; overflow-y: auto; }
+  .ballscreen-item { padding: 4px 6px; border-radius: 3px; cursor: pointer; font-size: 12px; margin-bottom: 4px; }
+  .ballscreen-item:hover { background: var(--row-alt); }
+  .ballscreen-item.selected { background: #dfeaff; }
+  .ballscreen-item .bh { color: var(--link); font-weight: 700; }
+  .ballscreen-item .sc { color: var(--link); margin-left: 12px; }
+  .ballscreen-form-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .ballscreen-form-row select, .ballscreen-form-row input { flex: 1; min-width: 130px; border: 1px solid var(--border); border-radius: 4px; padding: 6px 8px; font-size: 12px; }
+  .ballscreen-actions { display: flex; gap: 8px; }
+  .ballscreen-actions button { flex: 1; background: var(--navy); color: #fff; border: none; padding: 7px 0; border-radius: 4px; font-size: 12px; cursor: pointer; }
+  .ballscreen-actions button:hover { background: var(--navy-light); }
+  .ballscreen-actions .add-btn { background: var(--link); }
+  .ballscreen-actions .del-btn { background: #b0392b; }
+  .ballscreen-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; align-items: start; }
+  .ballscreen-grid .ballscreen-list { grid-column: 1; grid-row: 1; margin-bottom: 8px; max-height: none; height: 176px; }
+  .ballscreen-selects { grid-column: 2; grid-row: 1; display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+  .ballscreen-selects select { width: 100%; border: 1px solid var(--border); border-radius: 4px; padding: 6px 8px; font-size: 12px; box-sizing: border-box; }
+  .ballscreen-grid .ballscreen-actions { grid-column: 1; grid-row: 2; }
+  .ballscreen-videotime { grid-column: 2; grid-row: 2; display: flex; gap: 6px; align-items: center; }
+  .ballscreen-videotime input { flex: 1; border: 1px solid var(--border); border-radius: 4px; padding: 6px 8px; font-size: 12px; box-sizing: border-box; }
+  .ballscreen-videotime button { border: 1px solid var(--border); background: #fff; border-radius: 4px; width: 32px; height: 32px; cursor: pointer; color: var(--text-dim); font-size: 14px; }
+  .ballscreen-videotime button:hover { background: var(--row-alt); }
+
+  .court-wrap { width: 340px; flex-shrink: 0; }
+  .court-svg { width: 100%; height: auto; border: 1px solid var(--border); border-radius: 4px; cursor: crosshair; background: #fff; }
+  .court-hint { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+
+  .admin-only-msg { font-size: 11px; color: var(--text-dim); font-style: italic; padding: 10px 12px; background: var(--row-alt); border: 1px dashed var(--border); border-radius: 6px; margin: 12px 0; }
+
+  .video-section { padding: 12px 20px; border-bottom: 1px solid var(--border); display: flex; gap: 16px; align-items: flex-start; }
+  .video-box { width: 320px; flex-shrink: 0; background: #0d1626; border-radius: 6px; aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center; color: #7c8aa8; font-size: 12px; overflow: hidden; }
+  .video-box video { width: 100%; height: 100%; }
+  .upload-controls { display: flex; gap: 8px; align-items: center; font-size: 12px; padding-top: 6px; }
+  .upload-controls button { background: var(--link); color: #fff; border: none; padding: 6px 14px; border-radius: 4px; font-size: 12px; cursor: pointer; }
+  .upload-controls button:hover { background: #1c4a99; }
+</style>
+</head>
+<body>
+
+<header class="topbar" id="topbar" style="display:none;">
+  <div class="brand"><span>Shot</span><span class="dot">Tracker</span></div>
+  <div class="title">Annotation</div>
+  <div class="topbar-right" id="topbarRight"></div>
+</header>
+
+<!-- LOGIN -->
+<div id="view-login">
+  <div class="login-wrap">
+    <div class="login-box">
+      <div class="api-base-field">
+        <label>API Server URL</label>
+        <input type="text" id="apiBase" value="http://localhost:8000">
+      </div>
+      <input type="text" id="loginUser" placeholder="Username" autocomplete="username">
+      <input type="password" id="loginPass" placeholder="Password" autocomplete="current-password">
+      <button onclick="doLogin()" id="loginBtn">Login</button>
+      <div class="login-error" id="loginError"></div>
+      <div class="login-hint">Connects to your real FastAPI backend.<br>Seeded accounts: admin / changeme123 &middot; coder1 / changeme123</div>
+    </div>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="view-dashboard" class="hidden">
+  <div class="filterbar">
+    <div class="field"><label>Filter Team</label><input type="text" id="filterTeam" placeholder=""></div>
+    <div class="field"><label>From Date</label><input type="text" id="fromDate" placeholder="YYYY-MM-DD"></div>
+    <div class="filterbar-spacer"></div>
+    <button class="btn" id="manageUsersBtn" style="border-color:var(--navy); color:var(--navy); padding:8px 16px; border-radius:4px; cursor:pointer;" onclick="openUsersModal()">Manage Users</button>
+    <button class="btn-primary" id="addGameBtn" style="border:none; padding:8px 16px; border-radius:4px; cursor:pointer;" onclick="openAddGameModal()">+ Add Game</button>
+  </div>
+  <div id="dashStatus"></div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th><th>M/F</th><th>J</th><th>Home</th><th>Visitor</th><th>Video</th><th>Poss</th>
+          <th>InProcess</th><th>Clock/Vid</th><th>Complete</th><th>QA</th><th>Vid Err</th><th>Ann Err</th>
+          <th>CompleteBy</th><th>QA By</th><th>GameId</th><th>Notes</th><th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+  <div class="rowcount">
+    <span id="rowcount"></span>
+    <span class="locked-note" id="lockedNote"></span>
+  </div>
+</div>
+
+<!-- MANAGE USERS MODAL -->
+<div class="modal-backdrop hidden" id="usersModal">
+  <div class="modal" style="width:460px;">
+    <h3>Manage Users</h3>
+    <div id="usersList" style="max-height:200px; overflow-y:auto; border:1px solid var(--border); border-radius:4px; margin-bottom:14px;"></div>
+    <div style="font-size:12px; font-weight:700; margin-bottom:8px;">Add New Employee Login</div>
+    <div class="field"><label>Username</label><input type="text" id="nuUsername"></div>
+    <div class="field"><label>Password</label><input type="text" id="nuPassword" placeholder="Set a temporary password"></div>
+    <div class="field"><label>Role</label>
+      <select id="nuRole"><option value="annotator">Annotator</option><option value="admin">Admin</option></select>
+    </div>
+    <div class="modal-error" id="usersModalError"></div>
+    <div class="modal-actions">
+      <button onclick="closeUsersModal()">Close</button>
+      <button class="save" onclick="createUser()">+ Add User</button>
+    </div>
+  </div>
+</div>
+
+<!-- DETAILED ANNOTATION VIEW -->
+<div id="view-annotation" class="hidden">
+  <div class="ann2-topbar">
+    <button class="back-btn" onclick="backToDashboard()">BACK TO GAMES</button>
+    <div class="gid-field"><label>GameId</label><input type="text" id="annGameUid" readonly></div>
+    <span class="meta" id="annMeta" style="color:var(--text-dim); font-size:12px;"></span>
+  </div>
+  <div id="annStatus"></div>
+
+  <div class="ann2-wrap">
+    <!-- LEFT: possession list -->
+    <div class="ann2-left">
+      <div class="ann2-left-header" id="ann2Matchup"></div>
+      <div class="ann2-new-row" onclick="clearFormForNew()">+ New possession</div>
+      <div class="ann2-list-head"><span>Period</span><span>GC Start</span><span>GC End</span></div>
+      <div class="ann2-list" id="ann2List"></div>
+    </div>
+
+    <!-- RIGHT: detail form -->
+    <div class="ann2-right">
+      <div id="adminGateMsg"></div>
+      <div id="formArea">
+        <div class="ann2-save-row">
+          <button onclick="savePossession()" id="saveBtn">SAVE</button>
+          <button class="del" onclick="deleteCurrentPossession()" id="delBtn" style="display:none;">DELETE</button>
+        </div>
+
+        <div class="ann2-formrow">
+          <div class="field"><label>Start</label><input type="text" id="fStart" placeholder="mm:ss"></div>
+          <div class="field"><label>End</label><input type="text" id="fEnd" placeholder="mm:ss"></div>
+          <div class="field"><label>ShotClockEnd</label><input type="text" id="fShotClock" placeholder="0.00"></div>
+          <div class="field"><label>Video Time Start</label><input type="text" id="fVideoTime" placeholder="00:00:00"></div>
+          <button class="clip-btn" type="button" onclick="alert('Clip export needs real video playback wired in \u2014 not built yet.')">CLIP</button>
+
+          <div class="field"><label>Quarter</label>
+            <select id="fQuarter"><option>1</option><option>2</option><option>3</option><option>4</option><option>OT</option></select>
+          </div>
+          <div class="field"><label>ShotType</label>
+            <select id="fShotType"><option value="">--</option><option>Layup</option><option>Floater</option><option>Jumper</option><option>Hook Shot</option><option>Dunk</option></select>
+          </div>
+          <div class="ann2-radio-field">
+            <label class="radio-title">ShotAction</label>
+            <div class="ann2-radio-group">
+              <label><input type="radio" name="fShotAction" value="CAS"> CAS</label>
+              <label><input type="radio" name="fShotAction" value="OTD"> OTD</label>
+            </div>
+          </div>
+          <div class="ann2-radio-field">
+            <label class="radio-title">Contested</label>
+            <div class="ann2-radio-group">
+              <label><input type="radio" name="fContested" value="yes"> Yes</label>
+              <label><input type="radio" name="fContested" value="no"> No</label>
+            </div>
+          </div>
+          <div class="field"><label>Direction</label>
+            <select id="fDirection"><option value="">--</option><option>Left</option><option>Right</option><option>Middle</option></select>
+          </div>
+          <div class="field"><label>Play Type</label>
+            <select id="fPlayType"><option value="">--</option><option>ISO Player</option><option>PnR Ball Handler</option><option>PnR Roller</option><option>Post Up</option><option>Spot Up</option><option>Transition</option></select>
+          </div>
+        </div>
+
+        <div class="ann2-formrow">
+          <div class="field"><label>Passes</label><input type="number" id="fPasses" min="0" style="width:80px;"></div>
+          <div class="field"><label>Reversals</label><input type="number" id="fReversals" min="0" style="width:80px;"></div>
+          <div class="ann2-radio-field">
+            <label class="radio-title">PaintTouch</label>
+            <div class="ann2-radio-group">
+              <label><input type="radio" name="fPaintTouch" value="yes"> Yes</label>
+              <label><input type="radio" name="fPaintTouch" value="no"> No</label>
+            </div>
+          </div>
+          <div class="field"><label>Inbound</label>
+            <select id="fInbound"><option value="">--</option><option>No Inbound</option><option>Sideline</option><option>Baseline</option></select>
+          </div>
+          <div class="field"><label>Offense</label>
+            <select id="fOffenseScheme"><option value="">--</option><option>Motion</option><option>Isolation</option><option>Pick and Roll</option><option>Post Up</option><option>Transition</option></select>
+          </div>
+          <div class="field"><label>Defense</label>
+            <select id="fDefenseScheme"><option value="">--</option><option>Man-to-Man</option><option>Zone 2-3</option><option>Zone 3-2</option><option>Switch Everything</option></select>
+          </div>
+          <div class="field"><label>Team</label>
+            <select id="fTeam"></select>
+          </div>
+          <div class="field"><label>Player #</label><input type="text" id="fPlayerNumber" style="width:70px;"></div>
+          <div class="field"><label>Action</label>
+            <select id="fAction"><option>2PT Jumper</option><option>3PT Jumper</option><option>Free Throw</option><option>Layup</option><option>Turnover</option><option>Rebound</option><option>Foul</option><option>Assist</option></select>
+          </div>
+          <div class="field"><label>Result</label>
+            <select id="fResult"><option>Make</option><option>Miss</option><option>Offensive</option><option>Defensive</option><option>Lost Ball</option></select>
+          </div>
+        </div>
+
+        <div class="ann2-roster-grid">
+          <div class="roster-panel">
+            <div class="roster-panel-head" id="offenseCourtHead">Offense On-Court</div>
+            <div class="roster-panel-body" id="offenseCourtBody"></div>
+            <div class="add-player-row" id="offenseAddRow"></div>
+          </div>
+          <div class="roster-panel">
+            <div class="roster-panel-head" id="defenseCourtHead">Defense On-Court</div>
+            <div class="roster-panel-body" id="defenseCourtBody"></div>
+            <div class="add-player-row" id="defenseAddRow"></div>
+          </div>
+          <div class="roster-panel">
+            <div class="roster-panel-head">Deflected Pass</div>
+            <div class="roster-panel-body" id="deflectedBody"></div>
+          </div>
+          <div class="roster-panel">
+            <div class="roster-panel-head">Shot Defenders</div>
+            <div class="roster-panel-body" id="shotDefendersBody"></div>
+          </div>
+        </div>
+
+        <div class="ann2-bottom">
+          <div class="ballscreen-panel">
+            <div style="font-size:12px; font-weight:700; margin-bottom:6px;">Ball Screens</div>
+            <div class="ballscreen-grid">
+              <div class="ballscreen-list" id="ballscreenList"></div>
+              <div class="ballscreen-selects">
+                <select id="bsBallHandler"><option value="">Ball Handler</option></select>
+                <select id="bsScreener"><option value="">Screener</option></select>
+                <select id="bsScreenerAction"><option value="">Screener Action</option><option>Roll</option><option>Pop</option><option>Slip</option><option>Reject</option></select>
+                <select id="bsBallDefender"><option value="">Ball Defender</option></select>
+                <select id="bsScreenerDefender"><option value="">Screener Defender</option></select>
+                <select id="bsDefenderAction"><option value="">Defender Action</option><option>Hedge</option><option>Switch</option><option>Drop</option><option>Ice</option></select>
+              </div>
+              <div class="ballscreen-actions">
+                <button class="del-btn" onclick="deleteBallScreen()">DELETE</button>
+                <button class="add-btn" onclick="addBallScreen()">ADD</button>
+                <button onclick="updateBallScreen()">UPDATE</button>
+              </div>
+              <div class="ballscreen-videotime">
+                <input type="text" id="bsVideoTime" placeholder="Video Time Start">
+                <button type="button" title="Clear video time" onclick="document.getElementById('bsVideoTime').value='';">🗑</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="court-wrap">
+            <div style="font-size:12px; font-weight:700; margin-bottom:6px;">Shot Location</div>
+            <svg class="court-svg" id="courtSvg" viewBox="0 0 500 300" onclick="placeShotOnCourt(event)">
+              <rect x="1" y="1" width="498" height="298" fill="white" stroke="#333" stroke-width="1.5"/>
+              <rect x="1" y="90" width="120" height="120" fill="none" stroke="#333" stroke-width="1.5"/>
+              <circle cx="121" cy="150" r="45" fill="none" stroke="#333" stroke-width="1.5"/>
+              <circle cx="45" cy="150" r="6" fill="none" stroke="#333" stroke-width="1.5"/>
+              <path d="M 1 40 A 195 195 0 0 1 1 260" fill="none" stroke="#333" stroke-width="1.5"/>
+              <line x1="1" y1="40" x2="45" y2="40" stroke="#333" stroke-width="1.5"/>
+              <line x1="1" y1="260" x2="45" y2="260" stroke="#333" stroke-width="1.5"/>
+              <circle cx="250" cy="150" r="45" fill="none" stroke="#333" stroke-width="1.5"/>
+              <line x1="500" y1="0" x2="500" y2="300" stroke="#333" stroke-width="1.5"/>
+              <circle id="shotDot" cx="-10" cy="-10" r="6" fill="#1b7a3d" stroke="#fff" stroke-width="1.5"/>
+            </svg>
+            <div class="court-hint">Click the court to set the shot location.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ADD GAME MODAL -->
+<div class="modal-backdrop hidden" id="addGameModal">
+  <div class="modal">
+    <h3>Add New Game</h3>
+    <div class="field"><label>Date</label><input type="text" id="ngDate" placeholder="YYYY-MM-DD"></div>
+    <div class="field"><label>Home Team</label><input type="text" id="ngHome" placeholder="Home team"></div>
+    <div class="field"><label>Visitor Team</label><input type="text" id="ngVisitor" placeholder="Visitor team"></div>
+    <div class="field"><label>M/F</label><select id="ngMF"><option>M</option><option>F</option></select></div>
+    <div class="modal-error" id="modalError"></div>
+    <div class="modal-actions">
+      <button onclick="closeAddGameModal()">Cancel</button>
+      <button class="save" onclick="saveNewGame()">Save Game</button>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT GAME MODAL (admin only) -->
+<div class="modal-backdrop hidden" id="editGameModal">
+  <div class="modal">
+    <h3>Edit Game</h3>
+    <div class="field"><label>Date</label><input type="text" id="egDate" placeholder="YYYY-MM-DD"></div>
+    <div class="field"><label>Home Team</label><input type="text" id="egHome"></div>
+    <div class="field"><label>Visitor Team</label><input type="text" id="egVisitor"></div>
+    <div class="field"><label>M/F</label><select id="egMF"><option>M</option><option>F</option></select></div>
+    <div class="modal-error" id="editModalError"></div>
+    <div class="modal-actions">
+      <button onclick="closeEditGameModal()">Cancel</button>
+      <button class="save" onclick="saveEditedGame()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================= STATE ================= */
+let API_BASE = "http://localhost:8000";
+let token = null;
+let currentUser = null;
+let games = [];
+let currentGame = null;
+let possessionsList = [];
+let selectedPossessionId = null;  // null = creating a new one
+let ballScreens = [];             // local array for the possession being edited
+let selectedBallScreenIdx = null;
+let shotXY = null;                // {x, y} 0..1 relative to court, or null
+
+function isAdmin(){ return currentUser && currentUser.role === "admin"; }
+function pad(n){ return n.toString().padStart(2,'0'); }
+
+async function api(path, options = {}){
+  const headers = options.headers || {};
+  if(token) headers["Authorization"] = "Bearer " + token;
+  const res = await fetch(API_BASE + path, { ...options, headers });
+  if(res.status === 401){ doLogout("Your session expired. Please log in again."); throw new Error("Unauthorized"); }
+  if(!res.ok){
+    let detail = "Request failed (" + res.status + ")";
+    try { const j = await res.json(); if(j.detail) detail = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail); } catch(e){}
+    throw new Error(detail);
+  }
+  if(res.status === 204) return null;
+  return res.json();
+}
+
+/* ================= AUTH ================= */
+async function doLogin(){
+  API_BASE = document.getElementById('apiBase').value.trim().replace(/\/$/, '');
+  const u = document.getElementById('loginUser').value.trim();
+  const p = document.getElementById('loginPass').value;
+  const err = document.getElementById('loginError');
+  const btn = document.getElementById('loginBtn');
+  err.textContent = "";
+  if(!u || !p){ err.textContent = "Enter a username and password."; return; }
+  btn.disabled = true; btn.textContent = "Logging in...";
+  try {
+    const body = new URLSearchParams();
+    body.set('grant_type', 'password'); body.set('username', u); body.set('password', p);
+    const res = await fetch(API_BASE + "/auth/login", {
+      method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: body.toString()
+    });
+    if(!res.ok){
+      err.textContent = res.status === 401 ? "Invalid username or password." : ("Login failed (" + res.status + "). Is the server running at " + API_BASE + "?");
+      return;
+    }
+    const data = await res.json();
+    token = data.access_token;
+    currentUser = { username: data.username, role: data.role };
+    showTopbar();
+    await goToDashboard();
+  } catch(e){
+    err.textContent = "Couldn't reach " + API_BASE + ". Is the backend running? (" + e.message + ")";
+  } finally {
+    btn.disabled = false; btn.textContent = "Login";
+  }
+}
+
+function doLogout(message){
+  token = null; currentUser = null; games = []; currentGame = null;
+  document.getElementById('loginPass').value = "";
+  document.getElementById('loginError').textContent = message || "";
+  document.getElementById('topbar').style.display = 'none';
+  showView('view-login');
+}
+
+function showTopbar(){
+  const bar = document.getElementById('topbar');
+  bar.style.display = 'flex';
+  document.getElementById('topbarRight').innerHTML = `
+    <span class="role-pill">${currentUser.role}</span><span>${currentUser.username}</span>
+    <button class="btn" onclick="doLogout()">Logout</button>`;
+}
+
+function showView(id){
+  ['view-login','view-dashboard','view-annotation'].forEach(v=>{
+    document.getElementById(v).classList.toggle('hidden', v !== id);
+  });
+}
+
+/* ================= DASHBOARD ================= */
+async function goToDashboard(){
+  showView('view-dashboard');
+  document.getElementById('addGameBtn').style.display = isAdmin() ? 'inline-block' : 'none';
+  document.getElementById('manageUsersBtn').style.display = isAdmin() ? 'inline-block' : 'none';
+  document.getElementById('lockedNote').textContent = isAdmin() ? '' : 'Adding games, editing status, and video upload are restricted to Admin accounts.';
+  await loadGames();
+}
+
+async function loadGames(){
+  const statusEl = document.getElementById('dashStatus');
+  statusEl.innerHTML = `<div class="status-banner loading">Loading games from ${API_BASE}...</div>`;
+  try {
+    const team = document.getElementById('filterTeam').value.trim();
+    const fromDate = document.getElementById('fromDate').value.trim();
+    const params = new URLSearchParams();
+    if(team) params.set('team', team);
+    if(fromDate) params.set('from_date', fromDate);
+    const qs = params.toString() ? '?' + params.toString() : '';
+    games = await api('/games' + qs);
+    statusEl.innerHTML = "";
+    renderGames();
+  } catch(e){
+    statusEl.innerHTML = `<div class="status-banner error">Couldn't load games: ${e.message}</div>`;
+  }
+}
+
+function videoCellHtml(g){
+  const dis = isAdmin() ? '' : 'disabled';
+  if(g.video_path){
+    const url = API_BASE + g.video_path;
+    return `<a href="${url}" target="_blank">hls</a> &nbsp; <a href="${url}" download>mp4</a>`;
+  }
+  if(isAdmin()){
+    return `
+      <span class="video-cell-upload" onclick="triggerRowUpload(${g.id})">Upload</span>
+      <input type="file" accept="video/*" id="rowfile-${g.id}" style="display:none;" onchange="uploadVideoForGame(${g.id}, this.files[0])">
+    `;
+  }
+  return `<span style="color:var(--text-dim);">pending</span>`;
+}
+
+function renderGames(){
+  const tbody = document.getElementById('tbody');
+  const adminActions = isAdmin();
+  tbody.innerHTML = games.map(g => `
+    <tr>
+      <td>${g.date}</td><td>${g.mf}</td>
+      <td><span class="video-cell-upload" onclick="downloadGameJson(${g.id})" title="Download full annotation data as JSON">J</span></td>
+      <td>${g.home_team}</td><td>${g.visitor_team}</td>
+      <td>${videoCellHtml(g)}</td>
+      <td><button class="poss-btn" onclick="openAnnotation(${g.id})">Poss</button></td>
+      <td><input type="checkbox" class="dash-check" ${g.in_process ? 'checked' : ''} onchange="patchGame(${g.id}, 'in_process', this.checked)"></td>
+      <td><input type="checkbox" class="dash-check" ${g.clock_vid_ok ? 'checked' : ''} onchange="patchGame(${g.id}, 'clock_vid_ok', this.checked)"></td>
+      <td><input type="checkbox" class="dash-check" ${g.is_complete ? 'checked' : ''} onchange="patchGame(${g.id}, 'is_complete', this.checked)"></td>
+      <td><input type="checkbox" class="dash-check" ${g.is_qa_done ? 'checked' : ''} onchange="patchGame(${g.id}, 'is_qa_done', this.checked)"></td>
+      <td><input type="checkbox" class="dash-check" ${g.has_video_error ? 'checked' : ''} onchange="patchGame(${g.id}, 'has_video_error', this.checked)"></td>
+      <td><input type="checkbox" class="dash-check" ${g.has_annotation_error ? 'checked' : ''} onchange="patchGame(${g.id}, 'has_annotation_error', this.checked)"></td>
+      <td>${g.complete_by || ''}</td><td>${g.qa_by || ''}</td>
+      <td class="gameid">${g.game_uid.slice(0,8)}...</td>
+      <td><input type="text" class="notes-input ${g.notes === 'Received' ? 'received' : 'flag'}" value="${(g.notes||'').replace(/"/g,'&quot;')}"
+            onchange="patchGame(${g.id}, 'notes', this.value)"></td>
+      <td>${adminActions ? `<span class="video-cell-upload" onclick="openEditGameModal(${g.id})">Edit</span> &nbsp; <span class="video-cell-upload" style="color:#b0392b;" onclick="deleteGame(${g.id})">Delete</span>` : ''}</td>
+    </tr>`).join('');
+  document.getElementById('rowcount').textContent = `Showing ${games.length} game${games.length===1?'':'s'}`;
+}
+
+async function patchGame(gameId, field, value){
+  try {
+    const updated = await api(`/games/${gameId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [field]: value })
+    });
+    const idx = games.findIndex(g => g.id === gameId);
+    if(idx !== -1) games[idx] = updated;
+    renderGames();
+  } catch(e){
+    document.getElementById('dashStatus').innerHTML = `<div class="status-banner error">Couldn't save change: ${e.message}</div>`;
+    await loadGames(); // revert to real server state
+  }
+}
+
+function triggerRowUpload(gameId){ document.getElementById(`rowfile-${gameId}`).click(); }
+
+async function downloadGameJson(gameId){
+  const statusEl = document.getElementById('dashStatus');
+  try {
+    const res = await fetch(`${API_BASE}/games/${gameId}/export`, {
+      headers: { "Authorization": "Bearer " + token }
+    });
+    if(!res.ok) throw new Error("Export failed (" + res.status + ")");
+    const blob = await res.blob();
+    const cd = res.headers.get('Content-Disposition') || '';
+    const match = cd.match(/filename="([^"]+)"/);
+    const filename = match ? match[1] : `game_${gameId}.json`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  } catch(e){
+    statusEl.innerHTML = `<div class="status-banner error">Couldn't download: ${e.message}</div>`;
+  }
+}
+
+async function uploadVideoForGame(gameId, file){
+  if(!file) return;
+  const statusEl = document.getElementById('dashStatus');
+  statusEl.innerHTML = `<div class="status-banner loading">Uploading video...</div>`;
+  const form = new FormData();
+  form.append('file', file);
+  try {
+    await api(`/games/${gameId}/video`, { method: 'POST', body: form });
+    statusEl.innerHTML = "";
+    await loadGames();
+  } catch(e){
+    statusEl.innerHTML = `<div class="status-banner error">Upload failed: ${e.message}</div>`;
+  }
+}
+
+let filterTimeout;
+document.getElementById('filterTeam').addEventListener('input', () => { clearTimeout(filterTimeout); filterTimeout = setTimeout(loadGames, 400); });
+document.getElementById('fromDate').addEventListener('change', loadGames);
+
+/* ================= MANAGE USERS (admin only) ================= */
+async function openUsersModal(){
+  document.getElementById('usersModal').classList.remove('hidden');
+  document.getElementById('usersModalError').textContent = '';
+  await refreshUsersList();
+}
+function closeUsersModal(){
+  document.getElementById('usersModal').classList.add('hidden');
+  ['nuUsername','nuPassword'].forEach(id => document.getElementById(id).value = '');
+}
+async function refreshUsersList(){
+  const listEl = document.getElementById('usersList');
+  try {
+    const users = await api('/users');
+    listEl.innerHTML = users.map(u => `
+      <div class="user-row">
+        <span>${u.username} <span class="u-role">(${u.role})</span></span>
+        ${u.username !== currentUser.username ? `<span class="u-del" onclick="removeUser(${u.id})">Deactivate</span>` : ''}
+      </div>`).join('') || `<div class="user-row">No users yet.</div>`;
+  } catch(e){
+    listEl.innerHTML = `<div class="user-row" style="color:#b0392b;">${e.message}</div>`;
+  }
+}
+async function createUser(){
+  const errEl = document.getElementById('usersModalError');
+  const username = document.getElementById('nuUsername').value.trim();
+  const password = document.getElementById('nuPassword').value;
+  const role = document.getElementById('nuRole').value;
+  if(!username || !password){ errEl.textContent = "Username and password are required."; return; }
+  if(password.length < 6){ errEl.textContent = "Use at least 6 characters for the password."; return; }
+  try {
+    await api('/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password, role }) });
+    errEl.textContent = '';
+    document.getElementById('nuUsername').value = '';
+    document.getElementById('nuPassword').value = '';
+    await refreshUsersList(); // modal stays open so you can add the next employee right away
+  } catch(e){
+    errEl.textContent = e.message;
+  }
+}
+async function removeUser(userId){
+  try {
+    await api(`/users/${userId}`, { method: 'DELETE' });
+    await refreshUsersList();
+  } catch(e){
+    document.getElementById('usersModalError').textContent = e.message;
+  }
+}
+
+function openAddGameModal(){ document.getElementById('addGameModal').classList.remove('hidden'); document.getElementById('modalError').textContent = ""; }
+function closeAddGameModal(){ document.getElementById('addGameModal').classList.add('hidden'); ['ngDate','ngHome','ngVisitor'].forEach(id=>document.getElementById(id).value = ''); }
+async function saveNewGame(){
+  const errEl = document.getElementById('modalError');
+  const date = document.getElementById('ngDate').value.trim();
+  const home_team = document.getElementById('ngHome').value.trim();
+  const visitor_team = document.getElementById('ngVisitor').value.trim();
+  const mf = document.getElementById('ngMF').value;
+  if(!date || !home_team || !visitor_team){ errEl.textContent = "Date, home team, and visitor team are required."; return; }
+  try {
+    await api('/games', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date, home_team, visitor_team, mf }) });
+    closeAddGameModal();
+    await loadGames();
+  } catch(e){ errEl.textContent = e.message; }
+}
+
+/* ================= EDIT / DELETE GAME (admin only) ================= */
+let editingGameId = null;
+function openEditGameModal(gameId){
+  const g = games.find(x => x.id === gameId);
+  if(!g) return;
+  editingGameId = gameId;
+  document.getElementById('egDate').value = g.date;
+  document.getElementById('egHome').value = g.home_team;
+  document.getElementById('egVisitor').value = g.visitor_team;
+  document.getElementById('egMF').value = g.mf;
+  document.getElementById('editModalError').textContent = '';
+  document.getElementById('editGameModal').classList.remove('hidden');
+}
+function closeEditGameModal(){
+  document.getElementById('editGameModal').classList.add('hidden');
+  editingGameId = null;
+}
+async function saveEditedGame(){
+  const errEl = document.getElementById('editModalError');
+  const date = document.getElementById('egDate').value.trim();
+  const home_team = document.getElementById('egHome').value.trim();
+  const visitor_team = document.getElementById('egVisitor').value.trim();
+  const mf = document.getElementById('egMF').value;
+  if(!date || !home_team || !visitor_team){ errEl.textContent = "Date, home team, and visitor team are required."; return; }
+  try {
+    await api(`/games/${editingGameId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date, home_team, visitor_team, mf })
+    });
+    closeEditGameModal();
+    await loadGames();
+  } catch(e){ errEl.textContent = e.message; }
+}
+async function deleteGame(gameId){
+  const g = games.find(x => x.id === gameId);
+  const label = g ? `${g.visitor_team} @ ${g.home_team} (${g.date})` : `game #${gameId}`;
+  if(!confirm(`Delete ${label}? This also deletes all of its logged possessions. This can't be undone.`)) return;
+  try {
+    await api(`/games/${gameId}`, { method: 'DELETE' });
+    await loadGames();
+  } catch(e){
+    document.getElementById('dashStatus').innerHTML = `<div class="status-banner error">Couldn't delete: ${e.message}</div>`;
+  }
+}
+
+/* ================= ROSTERS (real, per-team, stored via the backend) ================= */
+let teamRosters = {}; // { teamName: [ {id, jersey_number, player_name} ] }
+
+async function loadRosterForTeam(teamName){
+  try {
+    teamRosters[teamName] = await api(`/players?team=${encodeURIComponent(teamName)}`);
+  } catch(e){
+    teamRosters[teamName] = [];
+  }
+}
+
+function rosterForTeam(teamName){
+  return (teamRosters[teamName] || [])
+    .map(p => ({ id: p.id, num: p.jersey_number, label: `#${p.jersey_number} ${p.player_name}` }));
+}
+
+function renderRosterPanel(bodyId, headId, roster, stateKey, teamName){
+  const body = document.getElementById(bodyId);
+  if(!roster.length){
+    body.innerHTML = `<div style="color:var(--text-dim); font-size:11px; padding:4px 0;">No players added yet.</div>`;
+  } else {
+    body.innerHTML = roster.map(p => `
+      <label class="roster-row">
+        <input type="checkbox" data-state="${stateKey}" data-num="${p.num}" data-label="${p.label}" onchange="onRosterToggle()">
+        ${p.label}
+        <span class="rm-player" onclick="event.preventDefault(); removePlayer(${p.id}, '${(teamName||'').replace(/'/g, "\\'")}')">remove</span>
+      </label>`).join('');
+  }
+  if(headId) updateRosterCount(headId, stateKey);
+}
+
+function renderAddPlayerRow(rowId, teamName){
+  const row = document.getElementById(rowId);
+  if(!row) return;
+  row.innerHTML = `
+    <input type="text" class="num-input" placeholder="#" id="np-num-${rowId}">
+    <input type="text" placeholder="Player name" id="np-name-${rowId}">
+    <button onclick="addPlayer('${teamName.replace(/'/g, "\\'")}', '${rowId}')">Add</button>
+  `;
+}
+
+async function addPlayer(teamName, rowId){
+  const numEl = document.getElementById(`np-num-${rowId}`);
+  const nameEl = document.getElementById(`np-name-${rowId}`);
+  const jersey_number = numEl.value.trim();
+  const player_name = nameEl.value.trim();
+  if(!jersey_number || !player_name) return;
+  try {
+    await api(`/players`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ team_name: teamName, jersey_number, player_name })
+    });
+    await loadRosterForTeam(teamName);
+    numEl.value = ''; nameEl.value = '';
+    refreshRosterPanels();
+  } catch(e){
+    document.getElementById('annStatus').innerHTML = `<div class="status-banner error">Couldn't add player: ${e.message}</div>`;
+  }
+}
+
+async function removePlayer(playerId, teamName){
+  try {
+    await api(`/players/${playerId}`, { method: 'DELETE' });
+    await loadRosterForTeam(teamName);
+    refreshRosterPanels();
+  } catch(e){
+    document.getElementById('annStatus').innerHTML = `<div class="status-banner error">Couldn't remove player: ${e.message}</div>`;
+  }
+}
+
+function refreshRosterPanels(){
+  // Remember which players were checked before re-rendering, so adding/removing
+  // one player doesn't clear the rest of your on-court selections.
+  const offenseChecked = getCheckedLabels('offense');
+  const defenseChecked = getCheckedLabels('defense');
+  const deflectedChecked = getCheckedLabels('deflected');
+  const shotdefChecked = getCheckedLabels('shotdef');
+
+  renderRosterPanel('offenseCourtBody', 'offenseCourtHead', rosterForTeam(currentGame.home_team), 'offense', currentGame.home_team);
+  renderRosterPanel('defenseCourtBody', 'defenseCourtHead', rosterForTeam(currentGame.visitor_team), 'defense', currentGame.visitor_team);
+  renderRosterPanel('deflectedBody', null, rosterForTeam(currentGame.visitor_team), 'deflected', currentGame.visitor_team);
+  renderRosterPanel('shotDefendersBody', null, rosterForTeam(currentGame.visitor_team), 'shotdef', currentGame.visitor_team);
+  renderAddPlayerRow('offenseAddRow', currentGame.home_team);
+  renderAddPlayerRow('defenseAddRow', currentGame.visitor_team);
+
+  setCheckedFromText('offense', offenseChecked.join(', '));
+  setCheckedFromText('defense', defenseChecked.join(', '));
+  setCheckedFromText('deflected', deflectedChecked.join(', '));
+  setCheckedFromText('shotdef', shotdefChecked.join(', '));
+  populateBallScreenSelects();
+}
+
+function updateRosterCount(headId, stateKey){
+  const checked = document.querySelectorAll(`input[data-state="${stateKey}"]:checked`).length;
+  const headEl = document.getElementById(headId);
+  if(headEl){
+    const base = headEl.textContent.split(' - ')[0];
+    headEl.textContent = `${base} - ${checked}`;
+  }
+}
+function onRosterToggle(){
+  updateRosterCount('offenseCourtHead', 'offense');
+  updateRosterCount('defenseCourtHead', 'defense');
+}
+function getCheckedLabels(stateKey){
+  return [...document.querySelectorAll(`input[data-state="${stateKey}"]:checked`)].map(el => el.dataset.label);
+}
+function setCheckedFromText(stateKey, text){
+  const labels = (text || '').split(',').map(s => s.trim()).filter(Boolean);
+  document.querySelectorAll(`input[data-state="${stateKey}"]`).forEach(el => {
+    el.checked = labels.includes(el.dataset.label);
+  });
+  onRosterToggle();
+}
+
+function populateBallScreenSelects(){
+  const offense = getCheckedLabels('offense');
+  const defense = getCheckedLabels('defense');
+  const fill = (id, list, placeholder) => {
+    const el = document.getElementById(id);
+    const current = el.value;
+    el.innerHTML = `<option value="">${placeholder}</option>` + list.map(l => `<option>${l}</option>`).join('');
+    if(list.includes(current)) el.value = current;
+  };
+  fill('bsBallHandler', offense, 'Ball Handler');
+  fill('bsScreener', offense, 'Screener');
+  fill('bsBallDefender', defense, 'Ball Defender');
+  fill('bsScreenerDefender', defense, 'Screener Defender');
+}
+document.addEventListener('change', (e) => {
+  if(e.target.dataset && e.target.dataset.state) populateBallScreenSelects();
+});
+
+/* ================= ANNOTATION VIEW ================= */
+async function openAnnotation(gameId){
+  showView('view-annotation');
+  document.getElementById('annStatus').innerHTML = `<div class="status-banner loading">Loading...</div>`;
+  try {
+    currentGame = await api('/games/' + gameId);
+    document.getElementById('annGameUid').value = currentGame.game_uid;
+    document.getElementById('annMeta').textContent = `${currentGame.date} \u00B7 ${currentGame.mf === 'F' ? "Women's" : "Men's"} \u00B7 Game #${currentGame.id}`;
+    document.getElementById('ann2Matchup').textContent = `${currentGame.visitor_team} at ${currentGame.home_team}`;
+
+    const teamSel = document.getElementById('fTeam');
+    teamSel.innerHTML = `<option>${currentGame.home_team}</option><option>${currentGame.visitor_team}</option>`;
+
+    await loadRosterForTeam(currentGame.home_team);
+    await loadRosterForTeam(currentGame.visitor_team);
+    refreshRosterPanels();
+
+    const gate = document.getElementById('adminGateMsg');
+    gate.innerHTML = isAdmin() ? '' : `<div class="admin-only-msg">You're logged in as an annotator. You can log, edit, and update possessions and rosters — deleting a possession is restricted to Admin accounts.</div>`;
+
+    await loadPossessions();
+    clearFormForNew();
+  } catch(e){
+    document.getElementById('annStatus').innerHTML = `<div class="status-banner error">${e.message}</div>`;
+  }
+}
+
+function backToDashboard(){ goToDashboard(); }
+
+async function loadPossessions(){
+  try {
+    possessionsList = await api(`/games/${currentGame.id}/possessions`);
+    document.getElementById('annStatus').innerHTML = "";
+    renderPossessionList();
+  } catch(e){
+    document.getElementById('annStatus').innerHTML = `<div class="status-banner error">${e.message}</div>`;
+  }
+}
+
+function renderPossessionList(){
+  const el = document.getElementById('ann2List');
+  el.innerHTML = possessionsList.map(p => {
+    const summary = `${p.team ? '#' + (p.player_number||'') + ' ' + p.team.split(' ')[0] : ''}: ${p.action || ''}${p.result ? ' (' + p.result + ')' : ''}`;
+    return `
+      <div class="ann2-row ${p.id === selectedPossessionId ? 'selected' : ''}" onclick="selectPossession(${p.id})">
+        <span>Q${p.quarter}</span><span>${p.start_time || p.clock || ''}</span><span>${p.end_time || ''}</span>
+        <span class="summary">${summary}</span>
+      </div>`;
+  }).join('');
+}
+
+function clearFormForNew(){
+  selectedPossessionId = null;
+  ballScreens = [];
+  shotXY = null;
+  document.getElementById('delBtn').style.display = 'none';
+  ['fStart','fEnd','fShotClock','fVideoTime','fPlayerNumber'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('fQuarter').value = '1';
+  document.getElementById('fPasses').value = '';
+  document.getElementById('fReversals').value = '';
+  ['fShotType','fDirection','fPlayType','fInbound','fOffenseScheme','fDefenseScheme'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('fAction').value = '2PT Jumper';
+  document.getElementById('fResult').value = 'Make';
+  document.querySelectorAll('input[type=radio]').forEach(r => r.checked = false);
+  document.querySelectorAll('input[data-state]').forEach(el => el.checked = false);
+  onRosterToggle();
+  populateBallScreenSelects();
+  renderBallScreenList();
+  updateShotDot();
+  renderPossessionList();
+}
+
+function selectPossession(id){
+  const p = possessionsList.find(x => x.id === id);
+  if(!p) return;
+  selectedPossessionId = id;
+  document.getElementById('delBtn').style.display = isAdmin() ? 'inline-block' : 'none';
+
+  document.getElementById('fStart').value = p.start_time || '';
+  document.getElementById('fEnd').value = p.end_time || '';
+  document.getElementById('fShotClock').value = p.shot_clock_end || '';
+  document.getElementById('fVideoTime').value = p.video_time_start || '';
+  document.getElementById('fQuarter').value = String(p.quarter);
+  document.getElementById('fShotType').value = p.shot_type || '';
+  document.getElementById('fDirection').value = p.direction || '';
+  document.getElementById('fPlayType').value = p.play_type || '';
+  document.getElementById('fPasses').value = p.passes ?? '';
+  document.getElementById('fReversals').value = p.reversals ?? '';
+  document.getElementById('fInbound').value = p.inbound_type || '';
+  document.getElementById('fOffenseScheme').value = p.offense_scheme || '';
+  document.getElementById('fDefenseScheme').value = p.defense_scheme || '';
+  document.getElementById('fTeam').value = p.team || currentGame.home_team;
+  document.getElementById('fPlayerNumber').value = p.player_number || '';
+  document.getElementById('fAction').value = p.action || '2PT Jumper';
+  document.getElementById('fResult').value = p.result || 'Make';
+
+  document.querySelectorAll('input[name=fShotAction]').forEach(r => r.checked = (r.value === p.shot_action));
+  document.querySelectorAll('input[name=fContested]').forEach(r => r.checked = (r.value === (p.contested === true ? 'yes' : p.contested === false ? 'no' : '')));
+  document.querySelectorAll('input[name=fPaintTouch]').forEach(r => r.checked = (r.value === (p.paint_touch === true ? 'yes' : p.paint_touch === false ? 'no' : '')));
+
+  setCheckedFromText('offense', p.offense_on_court);
+  setCheckedFromText('defense', p.defense_on_court);
+  setCheckedFromText('deflected', p.deflected_pass_by);
+  setCheckedFromText('shotdef', p.shot_defenders);
+  populateBallScreenSelects();
+
+  try { ballScreens = p.ball_screens ? JSON.parse(p.ball_screens) : []; } catch(e){ ballScreens = []; }
+  selectedBallScreenIdx = null;
+  renderBallScreenList();
+
+  shotXY = (p.shot_x && p.shot_y) ? { x: parseFloat(p.shot_x), y: parseFloat(p.shot_y) } : null;
+  updateShotDot();
+
+  renderPossessionList();
+}
+
+/* ---- Ball screens (local list, saved as JSON into the possession) ---- */
+function renderBallScreenList(){
+  const el = document.getElementById('ballscreenList');
+  if(!ballScreens.length){ el.innerHTML = `<div style="color:var(--text-dim); font-size:12px;">No ball screens added.</div>`; return; }
+  el.innerHTML = ballScreens.map((s, i) => `
+    <div class="ballscreen-item ${i === selectedBallScreenIdx ? 'selected' : ''}" onclick="selectBallScreen(${i})">
+      <div class="bh">${s.ballHandler || '(no ball handler)'}</div>
+      <div class="sc">${s.screener || ''} ${s.screenerAction ? '- ' + s.screenerAction : ''}</div>
+    </div>`).join('');
+}
+function selectBallScreen(i){
+  selectedBallScreenIdx = i;
+  const s = ballScreens[i];
+  document.getElementById('bsBallHandler').value = s.ballHandler || '';
+  document.getElementById('bsScreener').value = s.screener || '';
+  document.getElementById('bsScreenerAction').value = s.screenerAction || '';
+  document.getElementById('bsBallDefender').value = s.ballDefender || '';
+  document.getElementById('bsScreenerDefender').value = s.screenerDefender || '';
+  document.getElementById('bsDefenderAction').value = s.defenderAction || '';
+  document.getElementById('bsVideoTime').value = s.videoTime || '';
+  renderBallScreenList();
+}
+function readBallScreenForm(){
+  return {
+    ballHandler: document.getElementById('bsBallHandler').value,
+    screener: document.getElementById('bsScreener').value,
+    screenerAction: document.getElementById('bsScreenerAction').value,
+    ballDefender: document.getElementById('bsBallDefender').value,
+    screenerDefender: document.getElementById('bsScreenerDefender').value,
+    defenderAction: document.getElementById('bsDefenderAction').value,
+    videoTime: document.getElementById('bsVideoTime').value,
+  };
+}
+function addBallScreen(){
+  ballScreens.push(readBallScreenForm());
+  selectedBallScreenIdx = ballScreens.length - 1;
+  renderBallScreenList();
+}
+function updateBallScreen(){
+  if(selectedBallScreenIdx === null){ addBallScreen(); return; }
+  ballScreens[selectedBallScreenIdx] = readBallScreenForm();
+  renderBallScreenList();
+}
+function deleteBallScreen(){
+  if(selectedBallScreenIdx === null) return;
+  ballScreens.splice(selectedBallScreenIdx, 1);
+  selectedBallScreenIdx = null;
+  renderBallScreenList();
+}
+
+/* ---- Court diagram ---- */
+function placeShotOnCourt(evt){
+  if(!isAdmin()) return;
+  const svg = document.getElementById('courtSvg');
+  const pt = svg.createSVGPoint();
+  pt.x = evt.clientX; pt.y = evt.clientY;
+  const loc = pt.matrixTransform(svg.getScreenCTM().inverse());
+  shotXY = { x: (loc.x / 500).toFixed(3), y: (loc.y / 300).toFixed(3) };
+  updateShotDot();
+}
+function updateShotDot(){
+  const dot = document.getElementById('shotDot');
+  if(shotXY){ dot.setAttribute('cx', shotXY.x * 500); dot.setAttribute('cy', shotXY.y * 300); }
+  else { dot.setAttribute('cx', -10); dot.setAttribute('cy', -10); }
+}
+
+/* ---- Save / Delete ---- */
+function collectFormPayload(){
+  const shotActionEl = document.querySelector('input[name=fShotAction]:checked');
+  const contestedEl = document.querySelector('input[name=fContested]:checked');
+  const paintTouchEl = document.querySelector('input[name=fPaintTouch]:checked');
+  return {
+    quarter: parseInt(document.getElementById('fQuarter').value, 10) || 1,
+    clock: document.getElementById('fStart').value || '00:00',
+    team: document.getElementById('fTeam').value,
+    player_number: document.getElementById('fPlayerNumber').value || null,
+    action: document.getElementById('fAction').value,
+    result: document.getElementById('fResult').value,
+    start_time: document.getElementById('fStart').value || null,
+    end_time: document.getElementById('fEnd').value || null,
+    shot_clock_end: document.getElementById('fShotClock').value || null,
+    video_time_start: document.getElementById('fVideoTime').value || null,
+    shot_type: document.getElementById('fShotType').value || null,
+    shot_action: shotActionEl ? shotActionEl.value : null,
+    contested: contestedEl ? contestedEl.value === 'yes' : null,
+    direction: document.getElementById('fDirection').value || null,
+    play_type: document.getElementById('fPlayType').value || null,
+    shot_x: shotXY ? String(shotXY.x) : null,
+    shot_y: shotXY ? String(shotXY.y) : null,
+    passes: document.getElementById('fPasses').value ? parseInt(document.getElementById('fPasses').value, 10) : null,
+    reversals: document.getElementById('fReversals').value ? parseInt(document.getElementById('fReversals').value, 10) : null,
+    paint_touch: paintTouchEl ? paintTouchEl.value === 'yes' : null,
+    inbound_type: document.getElementById('fInbound').value || null,
+    offense_scheme: document.getElementById('fOffenseScheme').value || null,
+    defense_scheme: document.getElementById('fDefenseScheme').value || null,
+    offense_on_court: getCheckedLabels('offense').join(', ') || null,
+    defense_on_court: getCheckedLabels('defense').join(', ') || null,
+    deflected_pass_by: getCheckedLabels('deflected').join(', ') || null,
+    shot_defenders: getCheckedLabels('shotdef').join(', ') || null,
+    ball_screens: ballScreens.length ? JSON.stringify(ballScreens) : null,
+  };
+}
+
+async function savePossession(){
+  const statusEl = document.getElementById('annStatus');
+  try {
+    const payload = collectFormPayload();
+    if(selectedPossessionId){
+      await api(`/possessions/${selectedPossessionId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    } else {
+      await api(`/games/${currentGame.id}/possessions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    }
+    statusEl.innerHTML = `<div class="status-banner" style="background:#dff3e6; color:#1b7a3d;">Saved.</div>`;
+    await loadPossessions();
+    setTimeout(() => { statusEl.innerHTML = ""; }, 2000);
+  } catch(e){
+    statusEl.innerHTML = `<div class="status-banner error">${e.message}</div>`;
+  }
+}
+
+async function deleteCurrentPossession(){
+  if(!selectedPossessionId) return;
+  try {
+    await api(`/possessions/${selectedPossessionId}`, { method: 'DELETE' });
+    await loadPossessions();
+    clearFormForNew();
+  } catch(e){
+    document.getElementById('annStatus').innerHTML = `<div class="status-banner error">${e.message}</div>`;
+  }
+}
+
+/* Init */
+showView('view-login');
+</script>
+
+</body>
+</html>

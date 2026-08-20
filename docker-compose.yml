@@ -1,0 +1,30 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: annotation
+      POSTGRES_PASSWORD: annotation
+      POSTGRES_DB: annotation
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgresql://annotation:annotation@db:5432/annotation
+      JWT_SECRET: change-this-to-a-long-random-string
+      STORAGE_BACKEND: local
+      UPLOAD_DIR: /app/uploads
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./uploads:/app/uploads
+
+volumes:
+  pgdata:
