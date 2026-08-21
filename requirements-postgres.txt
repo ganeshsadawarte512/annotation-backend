@@ -1,0 +1,4 @@
+# Only needed when DATABASE_URL points to Postgres (production).
+# Not required for local dev, which defaults to SQLite.
+# Install with: python -m pip install -r requirements-postgres.txt
+psycopg2-binary==2.9.9
