@@ -130,8 +130,8 @@
   .add-player-row input.num-input { flex: 0 0 40px; }
   .add-player-row button { background: var(--link); color: #fff; border: none; border-radius: 3px; padding: 3px 8px; font-size: 11px; cursor: pointer; }
 
-  .ann2-bottom { display: flex; gap: 20px; flex-wrap: wrap; }
-  .ballscreen-panel { flex: 0; min-width: 420px; border: 1px solid var(--border); border-radius: 4px; padding: 10px; }
+  .ann2-bottom { display: flex; gap: 20px; flex-wrap: nowrap; align-items: flex-start; overflow-x: auto; }
+  .ballscreen-panel { flex: 0 0 420px; min-width: 420px; border: 1px solid var(--border); border-radius: 4px; padding: 10px; }
   .ballscreen-list { min-height: 90px; border: 1px solid var(--border); border-radius: 4px; padding: 8px; margin-bottom: 8px; max-height: 130px; overflow-y: auto; }
   .ballscreen-item { padding: 4px 6px; border-radius: 3px; cursor: pointer; font-size: 12px; margin-bottom: 4px; }
   .ballscreen-item:hover { background: var(--row-alt); }
@@ -155,8 +155,10 @@
   .ballscreen-videotime button { border: 1px solid var(--border); background: #fff; border-radius: 4px; width: 32px; height: 32px; cursor: pointer; color: var(--text-dim); font-size: 14px; }
   .ballscreen-videotime button:hover { background: var(--row-alt); }
 
-  .court-wrap { width: 340px; flex-shrink: 0; }
-  .court-svg { width: 100%; height: auto; border: 1px solid var(--border); border-radius: 4px; cursor: crosshair; background: #fff; }
+  .court-wrap { flex: 0 0 380px; width: 380px; flex-shrink: 0; }
+  .court-img-wrap { position: relative; width: 100%; border: 1px solid var(--border); border-radius: 4px; cursor: crosshair; background: #fff; overflow: hidden; line-height: 0; }
+  .court-img { width: 100%; height: auto; display: block; user-select: none; -webkit-user-drag: none; pointer-events: none; }
+  .shot-dot { position: absolute; width: 14px; height: 14px; border-radius: 50%; background: #1b7a3d; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,0.35); pointer-events: none; display: none; transform: translate(-50%, -50%); }
   .court-hint { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
 
   .admin-only-msg { font-size: 11px; color: var(--text-dim); font-style: italic; padding: 10px 12px; background: var(--row-alt); border: 1px dashed var(--border); border-radius: 6px; margin: 12px 0; }
@@ -271,15 +273,15 @@
         <div class="ann2-formrow">
           <div class="field"><label>Start</label><input type="text" id="fStart" placeholder="mm:ss"></div>
           <div class="field"><label>End</label><input type="text" id="fEnd" placeholder="mm:ss"></div>
-          <div class="field"><label>ShotClockEnd</label><input type="text" id="fShotClock" placeholder="0.00"></div>
-          <div class="field"><label>Video Time Start</label><input type="text" id="fVideoTime" placeholder="00:00:00"></div>
+          <div class="field"><label>ShotClockEnd</label><input type="text" id="fShotClock" placeholder="0-30 sec"></div>
+          <div class="field"><label>Video Time Start</label><input type="text" id="fVideoTime" placeholder="mm:ss"></div>
           <button class="clip-btn" type="button" onclick="alert('Clip export needs real video playback wired in \u2014 not built yet.')">CLIP</button>
 
           <div class="field"><label>Quarter</label>
             <select id="fQuarter"><option>1</option><option>2</option><option>3</option><option>4</option><option>OT</option></select>
           </div>
           <div class="field"><label>ShotType</label>
-            <select id="fShotType"><option value="">--</option><option>Layup</option><option>Floater</option><option>Jumper</option><option>Hook Shot</option><option>Dunk</option></select>
+            <select id="fShotType"><option value="">--</option><option>JumpShot</option><option>Tipin</option><option>Layup</option><option>DriveLayup</option><option>Hook</option><option>Fadeway</option><option>Floater</option><option>Stepback/Sidestep jumper</option><option>Turnaround Jumper</option><option>Alleyoop</option><option>Dunk</option></select>
           </div>
           <div class="ann2-radio-field">
             <label class="radio-title">ShotAction</label>
@@ -298,8 +300,8 @@
           <div class="field"><label>Direction</label>
             <select id="fDirection"><option value="">--</option><option>Left</option><option>Right</option><option>Middle</option></select>
           </div>
-          <div class="field"><label>Play Type</label>
-            <select id="fPlayType"><option value="">--</option><option>ISO Player</option><option>PnR Ball Handler</option><option>PnR Roller</option><option>Post Up</option><option>Spot Up</option><option>Transition</option></select>
+          <div class="field"><label>ISO Player</label>
+            <select id="fPlayType"><option value="">ISO Player</option></select>
           </div>
         </div>
 
@@ -317,17 +319,17 @@
             <select id="fInbound"><option value="">--</option><option>No Inbound</option><option>Sideline</option><option>Baseline</option></select>
           </div>
           <div class="field"><label>Offense</label>
-            <select id="fOffenseScheme"><option value="">--</option><option>Motion</option><option>Isolation</option><option>Pick and Roll</option><option>Post Up</option><option>Transition</option></select>
+            <select id="fOffenseScheme"><option value="">--</option><option>Motion</option><option>Transaction</option><option>Dribble Drive</option><option>Flex</option><option>Floppy</option><option>High-Low</option><option>Horn</option><option>Isolation</option><option>Inversion</option><option>Princeton/Backdoor</option><option>Spread</option></select>
           </div>
           <div class="field"><label>Defense</label>
-            <select id="fDefenseScheme"><option value="">--</option><option>Man-to-Man</option><option>Zone 2-3</option><option>Zone 3-2</option><option>Switch Everything</option></select>
+            <select id="fDefenseScheme"><option value="">--</option><option>Man-to-Man</option><option>Full-Court Man-to-Man</option><option>Half-Court Pressing Man-to-Man</option><option>Zone</option><option>1-3-1 Zone</option><option>2-3 Zone</option><option>3-2 Zone</option><option>Matchup Zone</option><option>Box-and-1 Defense</option><option>Triangle-and-2 Defense</option></select>
           </div>
           <div class="field"><label>Team</label>
             <select id="fTeam"></select>
           </div>
           <div class="field"><label>Player #</label><input type="text" id="fPlayerNumber" style="width:70px;"></div>
           <div class="field"><label>Action</label>
-            <select id="fAction"><option>2PT Jumper</option><option>3PT Jumper</option><option>Free Throw</option><option>Layup</option><option>Turnover</option><option>Rebound</option><option>Foul</option><option>Assist</option></select>
+            <select id="fAction"><option>2PT</option><option>3PT</option><option>AST</option><option>STL</option><option>LBTO</option><option>DEFENSIVE_REB</option><option>OFFENSIVE_REB</option><option>FLDN</option><option>FT</option><option>FTA</option></select>
           </div>
           <div class="field"><label>Result</label>
             <select id="fResult"><option>Make</option><option>Miss</option><option>Offensive</option><option>Defensive</option><option>Lost Ball</option></select>
@@ -374,7 +376,7 @@
                 <button onclick="updateBallScreen()">UPDATE</button>
               </div>
               <div class="ballscreen-videotime">
-                <input type="text" id="bsVideoTime" placeholder="Video Time Start">
+                <input type="text" id="bsVideoTime" placeholder="mm:ss">
                 <button type="button" title="Clear video time" onclick="document.getElementById('bsVideoTime').value='';">🗑</button>
               </div>
             </div>
@@ -382,18 +384,10 @@
 
           <div class="court-wrap">
             <div style="font-size:12px; font-weight:700; margin-bottom:6px;">Shot Location</div>
-            <svg class="court-svg" id="courtSvg" viewBox="0 0 500 300" onclick="placeShotOnCourt(event)">
-              <rect x="1" y="1" width="498" height="298" fill="white" stroke="#333" stroke-width="1.5"/>
-              <rect x="1" y="90" width="120" height="120" fill="none" stroke="#333" stroke-width="1.5"/>
-              <circle cx="121" cy="150" r="45" fill="none" stroke="#333" stroke-width="1.5"/>
-              <circle cx="45" cy="150" r="6" fill="none" stroke="#333" stroke-width="1.5"/>
-              <path d="M 1 40 A 195 195 0 0 1 1 260" fill="none" stroke="#333" stroke-width="1.5"/>
-              <line x1="1" y1="40" x2="45" y2="40" stroke="#333" stroke-width="1.5"/>
-              <line x1="1" y1="260" x2="45" y2="260" stroke="#333" stroke-width="1.5"/>
-              <circle cx="250" cy="150" r="45" fill="none" stroke="#333" stroke-width="1.5"/>
-              <line x1="500" y1="0" x2="500" y2="300" stroke="#333" stroke-width="1.5"/>
-              <circle id="shotDot" cx="-10" cy="-10" r="6" fill="#1b7a3d" stroke="#fff" stroke-width="1.5"/>
-            </svg>
+            <div class="court-img-wrap" id="courtImgWrap" onclick="placeShotOnCourt(event)">
+              <img class="court-img" id="courtImg" src="D1-FullCourt-Mens.fa529c990aa6410d401c.png" alt="Full court diagram">
+              <div class="shot-dot" id="shotDot"></div>
+            </div>
             <div class="court-hint">Click the court to set the shot location.</div>
           </div>
         </div>
@@ -882,6 +876,7 @@ function populateBallScreenSelects(){
   fill('bsScreener', offense, 'Screener');
   fill('bsBallDefender', defense, 'Ball Defender');
   fill('bsScreenerDefender', defense, 'Screener Defender');
+  fill('fPlayType', offense, 'ISO Player');
 }
 document.addEventListener('change', (e) => {
   if(e.target.dataset && e.target.dataset.state) populateBallScreenSelects();
@@ -948,7 +943,7 @@ function clearFormForNew(){
   document.getElementById('fPasses').value = '';
   document.getElementById('fReversals').value = '';
   ['fShotType','fDirection','fPlayType','fInbound','fOffenseScheme','fDefenseScheme'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('fAction').value = '2PT Jumper';
+  document.getElementById('fAction').value = '2PT';
   document.getElementById('fResult').value = 'Make';
   document.querySelectorAll('input[type=radio]').forEach(r => r.checked = false);
   document.querySelectorAll('input[data-state]').forEach(el => el.checked = false);
@@ -980,7 +975,7 @@ function selectPossession(id){
   document.getElementById('fDefenseScheme').value = p.defense_scheme || '';
   document.getElementById('fTeam').value = p.team || currentGame.home_team;
   document.getElementById('fPlayerNumber').value = p.player_number || '';
-  document.getElementById('fAction').value = p.action || '2PT Jumper';
+  document.getElementById('fAction').value = p.action || '2PT';
   document.getElementById('fResult').value = p.result || 'Make';
 
   document.querySelectorAll('input[name=fShotAction]').forEach(r => r.checked = (r.value === p.shot_action));
@@ -1053,20 +1048,52 @@ function deleteBallScreen(){
   renderBallScreenList();
 }
 
+/* ---- Time field formatting ---- */
+// Start / End / Video Time Start: raw digits -> "m:ss" (or "mm:ss"), e.g. "1959" -> "19:59".
+function formatClockMMSS(raw){
+  const digits = (raw || '').replace(/\D/g, '');
+  if(!digits) return '';
+  let mins, secsStr;
+  if(digits.length <= 2){ mins = '0'; secsStr = digits.padStart(2, '0'); }
+  else { secsStr = digits.slice(-2); mins = String(parseInt(digits.slice(0, -2), 10)); }
+  const secs = Math.min(parseInt(secsStr, 10), 59);
+  return mins + ':' + String(secs).padStart(2, '0');
+}
+// Shot clock: capped at 30 seconds, so it gets its own clear seconds[.tenths] format
+// instead of mm:ss — e.g. "24" -> "24", "195" -> "19.5" (clamped to 30 max).
+function formatShotClock(raw){
+  const digits = (raw || '').replace(/\D/g, '');
+  if(!digits) return '';
+  let val;
+  if(digits.length <= 2){ val = parseInt(digits, 10); }
+  else { val = parseFloat(digits.slice(0, -1) + '.' + digits.slice(-1)); }
+  val = Math.min(Math.max(val, 0), 30);
+  return (digits.length <= 2) ? String(val) : val.toFixed(1);
+}
+['fStart', 'fEnd', 'fVideoTime', 'bsVideoTime'].forEach(id => {
+  document.getElementById(id).addEventListener('blur', function(){ this.value = formatClockMMSS(this.value); });
+});
+document.getElementById('fShotClock').addEventListener('blur', function(){ this.value = formatShotClock(this.value); });
+
 /* ---- Court diagram ---- */
 function placeShotOnCourt(evt){
   if(!isAdmin()) return;
-  const svg = document.getElementById('courtSvg');
-  const pt = svg.createSVGPoint();
-  pt.x = evt.clientX; pt.y = evt.clientY;
-  const loc = pt.matrixTransform(svg.getScreenCTM().inverse());
-  shotXY = { x: (loc.x / 500).toFixed(3), y: (loc.y / 300).toFixed(3) };
+  const wrap = document.getElementById('courtImgWrap');
+  const rect = wrap.getBoundingClientRect();
+  const x = (evt.clientX - rect.left) / rect.width;
+  const y = (evt.clientY - rect.top) / rect.height;
+  shotXY = { x: Math.min(Math.max(x, 0), 1).toFixed(3), y: Math.min(Math.max(y, 0), 1).toFixed(3) };
   updateShotDot();
 }
 function updateShotDot(){
   const dot = document.getElementById('shotDot');
-  if(shotXY){ dot.setAttribute('cx', shotXY.x * 500); dot.setAttribute('cy', shotXY.y * 300); }
-  else { dot.setAttribute('cx', -10); dot.setAttribute('cy', -10); }
+  if(shotXY){
+    dot.style.left = (shotXY.x * 100) + '%';
+    dot.style.top = (shotXY.y * 100) + '%';
+    dot.style.display = 'block';
+  } else {
+    dot.style.display = 'none';
+  }
 }
 
 /* ---- Save / Delete ---- */
