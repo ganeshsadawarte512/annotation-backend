@@ -42,7 +42,9 @@ class GameOut(BaseModel):
     date: str
     mf: str
     home_team: str
+    home_team_id: Optional[str] = None
     visitor_team: str
+    visitor_team_id: Optional[str] = None
     video_path: Optional[str]
     video_status: str
     in_process: bool

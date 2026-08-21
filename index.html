@@ -255,6 +255,8 @@
     <div class="ann2-left">
       <div class="ann2-left-header" id="ann2Matchup"></div>
       <div class="ann2-new-row" onclick="clearFormForNew()">+ New possession</div>
+      <div class="ann2-new-row" onclick="document.getElementById('importJsonInput').click()">&#8593; Import JSON</div>
+      <input type="file" id="importJsonInput" accept=".json,application/json" style="display:none" onchange="handleImportJsonFile(event)">
       <div class="ann2-list-head"><span>Period</span><span>GC Start</span><span>GC End</span></div>
       <div class="ann2-list" id="ann2List"></div>
     </div>
@@ -1130,6 +1132,129 @@ async function savePossession(){
   } catch(e){
     statusEl.innerHTML = `<div class="status-banner error">${e.message}</div>`;
   }
+}
+
+/* ---- Import possessions from a pre-annotated JSON export ---- */
+// Action-code mapping: JSON possessionType -> {action, result} matching our Action dropdown.
+const IMPORT_ACTION_MAP = {
+  FG:  (is3) => ({ action: is3 ? '3PT' : '2PT', result: 'Make' }),
+  FGA: (is3) => ({ action: is3 ? '3PT' : '2PT', result: 'Miss' }),
+  FT:  () => ({ action: 'FT', result: 'Make' }),
+  FTA: () => ({ action: 'FTA', result: 'Miss' }),
+  AST: () => ({ action: 'AST', result: null }),
+  STL: () => ({ action: 'STL', result: 'Defensive' }),
+  LBTO: () => ({ action: 'LBTO', result: 'Lost Ball' }),
+  OFFENSIVE_REB: () => ({ action: 'OFFENSIVE_REB', result: 'Offensive' }),
+  DEFENSIVE_REB: () => ({ action: 'DEFENSIVE_REB', result: 'Defensive' }),
+};
+const IMPORT_SHOT_TYPE_MAP = { LAYUP: 'Layup', FLOATER: 'Floater', JUMPSHOT: 'Jumper', HOOKSHOT: 'Hook Shot', DUNK: 'Dunk' };
+const IMPORT_OFFENSE_MAP = { motion: 'Motion', isolation: 'Isolation', pickandroll: 'Pick and Roll', postup: 'Post Up', transition: 'Transition' };
+const IMPORT_DEFENSE_MAP = { mantoman: 'Man-to-Man', fullcourtmantoman: 'Man-to-Man', zone23: 'Zone 2-3', zone32: 'Zone 3-2', switcheverything: 'Switch Everything' };
+
+function normKey(s){ return (s || '').toString().toLowerCase().replace(/[^a-z0-9]/g, ''); }
+
+function handleImportJsonFile(evt){
+  const file = evt.target.files[0];
+  evt.target.value = ''; // allow re-selecting the same file later
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    let data;
+    try { data = JSON.parse(reader.result); }
+    catch(e){ alert('That file is not valid JSON: ' + e.message); return; }
+    if(!Array.isArray(data)){ alert('Expected a JSON array of possession objects.'); return; }
+    importPossessions(data);
+  };
+  reader.readAsText(file);
+}
+
+function mapTeamIdsForImport(teamIds){
+  const map = {};
+  if(teamIds.length === 0) return map;
+  if(teamIds.length === 1){
+    const useHome = confirm(`All possessions use team ID "${teamIds[0]}".\n\nClick OK if this is ${currentGame.home_team}, or Cancel if it's ${currentGame.visitor_team}.`);
+    map[teamIds[0]] = useHome ? currentGame.home_team : currentGame.visitor_team;
+    return map;
+  }
+  const ans = (prompt(`This file has team IDs: ${teamIds.join(', ')}.\n\nWhich one is ${currentGame.home_team}? Type it exactly as shown.`, teamIds[0]) || '').trim();
+  const homeId = teamIds.includes(ans) ? ans : teamIds[0];
+  map[homeId] = currentGame.home_team;
+  teamIds.forEach(t => { if(t !== homeId) map[t] = currentGame.visitor_team; });
+  return map;
+}
+
+function buildImportPayload(d, teamIdMap){
+  const subEvents = d.possessions || [];
+  const primary = subEvents.length ? subEvents[subEvents.length - 1] : null;
+  const typeInfo = primary ? IMPORT_ACTION_MAP[primary.possessionType] : null;
+  const derived = typeInfo ? typeInfo(!!primary.is3Point) : { action: (primary && primary.possessionType) || 'OTHER', result: null };
+
+  const quarter = d.period === 'H2' ? 2 : 1;
+  const team = teamIdMap[d.teamId] || currentGame.home_team;
+
+  const shot = d.shot || null;
+  const attrs = (shot && shot.attributes) || [];
+  const shotType = attrs.map(a => IMPORT_SHOT_TYPE_MAP[a]).find(Boolean) || null;
+  const shotAction = attrs.includes('CAS') ? 'CAS' : (attrs.includes('OTD') ? 'OTD' : null);
+  const contested = attrs.includes('GUARDED') ? true : (attrs.includes('OPEN') ? false : null);
+
+  const offenseRaw = (d.labeledEvents && d.labeledEvents.offenses && d.labeledEvents.offenses[0]) || null;
+  const defenseRaw = (d.labeledEvents && d.labeledEvents.defenses && d.labeledEvents.defenses[0]) || null;
+  const offenseScheme = offenseRaw ? (IMPORT_OFFENSE_MAP[normKey(offenseRaw)] || null) : null;
+  const defenseScheme = defenseRaw ? (IMPORT_DEFENSE_MAP[normKey(defenseRaw)] || null) : null;
+
+  const shotClockRaw = d.endShotClock ?? d.endShotCock ?? (primary && primary.shotClock) ?? null;
+
+  return {
+    quarter,
+    clock: d.startGameClock || '00:00',
+    team,
+    player_number: primary && primary.playerId ? String(primary.playerId) : null,
+    action: derived.action,
+    result: derived.result || 'Make',
+    start_time: d.startGameClock || null,
+    end_time: d.endGameClock || null,
+    shot_clock_end: shotClockRaw != null ? String(shotClockRaw) : null,
+    video_time_start: (d.labeledEvents && d.labeledEvents.videoTimeMark) || null,
+    shot_type: shotType,
+    shot_action: shotAction,
+    contested,
+    direction: null,
+    play_type: null,
+    shot_x: null,
+    shot_y: null,
+    passes: (d.events && typeof d.events.passes === 'number') ? d.events.passes : null,
+    reversals: (d.events && typeof d.events.ballReversals === 'number') ? d.events.ballReversals : null,
+    paint_touch: (d.labeledEvents && typeof d.labeledEvents.paintTouch === 'boolean') ? d.labeledEvents.paintTouch : null,
+    inbound_type: null,
+    offense_scheme: offenseScheme,
+    defense_scheme: defenseScheme,
+    offense_on_court: Array.isArray(d.lineupPlayers) ? d.lineupPlayers.join(', ') : null,
+    defense_on_court: Array.isArray(d.opponentLineupPlayers) ? d.opponentLineupPlayers.join(', ') : null,
+    deflected_pass_by: (d.labeledEvents && Array.isArray(d.labeledEvents.passDeflectedBy) && d.labeledEvents.passDeflectedBy.length) ? d.labeledEvents.passDeflectedBy.join(', ') : null,
+    shot_defenders: (shot && Array.isArray(shot.shotDefenders) && shot.shotDefenders.length) ? shot.shotDefenders.join(', ') : null,
+    ball_screens: null,
+  };
+}
+
+async function importPossessions(data){
+  const statusEl = document.getElementById('annStatus');
+  const teamIds = [...new Set(data.map(d => d.teamId).filter(Boolean))];
+  const teamIdMap = mapTeamIdsForImport(teamIds);
+
+  let ok = 0, failed = 0;
+  for(let i = 0; i < data.length; i++){
+    statusEl.innerHTML = `<div class="status-banner loading">Importing ${i + 1} of ${data.length}...</div>`;
+    try {
+      const payload = buildImportPayload(data[i], teamIdMap);
+      await api(`/games/${currentGame.id}/possessions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      ok++;
+    } catch(e){
+      failed++;
+    }
+  }
+  statusEl.innerHTML = `<div class="status-banner" style="background:${failed ? '#fdecea' : '#dff3e6'}; color:${failed ? '#b0392b' : '#1b7a3d'};">Imported ${ok} possession${ok === 1 ? '' : 's'}${failed ? `, ${failed} failed` : ''}. Player numbers show raw IDs from the file since no name mapping was provided \u2014 edit them in the roster to add real jersey numbers/names.</div>`;
+  await loadPossessions();
 }
 
 async function deleteCurrentPossession(){
