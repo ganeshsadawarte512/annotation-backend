@@ -71,13 +71,9 @@ class Possession(Base):
     id = Column(Integer, primary_key=True, index=True)
     game_id = Column(Integer, ForeignKey("games.id"), nullable=False)
 
-    # Basic play info (original fields)
+    # Basic play info
     quarter = Column(Integer, nullable=False)
-    clock = Column(String, nullable=False)  # mm:ss - kept for backward compatibility
-    team = Column(String, nullable=False)
-    player_number = Column(String, nullable=True)
-    action = Column(String, nullable=False)
-    result = Column(String, nullable=False)
+    clock = Column(String, nullable=True)  # mm:ss - legacy field, kept for backward compatibility
 
     # Timing detail
     start_time = Column(String, nullable=True)       # game clock at possession start, e.g. "09:59:00"
@@ -90,7 +86,7 @@ class Possession(Base):
     shot_action = Column(String, nullable=True)   # e.g. "CAS", "OTD" (catch-and-shoot / off-the-dribble)
     contested = Column(Boolean, nullable=True)
     direction = Column(String, nullable=True)     # e.g. "Left", "Right"
-    play_type = Column(String, nullable=True)     # e.g. "ISO Player", "PnR Ball Handler"
+    play_type = Column(String, nullable=True)     # ISO Player selection
     shot_x = Column(String, nullable=True)         # court-diagram coordinates, stored as text (e.g. "0.62")
     shot_y = Column(String, nullable=True)
 
@@ -117,3 +113,26 @@ class Possession(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     game = relationship("Game", back_populates="possessions")
+    actions = relationship(
+        "PossessionAction",
+        back_populates="possession",
+        cascade="all, delete-orphan",
+        order_by="PossessionAction.sort_order",
+    )
+
+
+class PossessionAction(Base):
+    """One player+action+result entry within a possession. A possession can
+    hold several of these — e.g. an offensive rebound followed by the made
+    field goal it led to — instead of being limited to a single action."""
+    __tablename__ = "possession_actions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    possession_id = Column(Integer, ForeignKey("possessions.id"), nullable=False)
+    sort_order = Column(Integer, default=0)
+    team = Column(String, nullable=False)
+    player_number = Column(String, nullable=True)
+    action = Column(String, nullable=False)
+    result = Column(String, nullable=True)
+
+    possession = relationship("Possession", back_populates="actions")

@@ -33,6 +33,7 @@ class GameCreate(BaseModel):
     home_team_id: Optional[str] = None
     visitor_team: str
     visitor_team_id: Optional[str] = None
+    game_uid: Optional[str] = None  # admin can set this manually at creation; auto-generated if omitted
 
 
 class GameOut(BaseModel):
@@ -42,7 +43,9 @@ class GameOut(BaseModel):
     date: str
     mf: str
     home_team: str
+    home_team_id: Optional[str]
     visitor_team: str
+    visitor_team_id: Optional[str]
     video_path: Optional[str]
     video_status: str
     in_process: bool
@@ -96,13 +99,29 @@ class PlayerOut(BaseModel):
 
 
 # ---------- Possessions ----------
-class PossessionCreate(BaseModel):
-    quarter: int
-    clock: str
+class PossessionActionCreate(BaseModel):
     team: str
     player_number: Optional[str] = None
     action: str
-    result: str
+    result: Optional[str] = None
+
+
+class PossessionActionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    team: str
+    player_number: Optional[str] = None
+    action: str
+    result: Optional[str] = None
+
+
+class PossessionCreate(BaseModel):
+    quarter: int
+    clock: Optional[str] = None  # legacy mm:ss field; start_time/end_time supersede it
+
+    # One or more player+action+result entries logged for this possession
+    # (e.g. an offensive rebound followed by the field goal it led to).
+    actions: list[PossessionActionCreate] = []
 
     # Timing detail
     start_time: Optional[str] = None
@@ -140,11 +159,8 @@ class PossessionOut(BaseModel):
     id: int
     game_id: int
     quarter: int
-    clock: str
-    team: str
-    player_number: Optional[str]
-    action: str
-    result: str
+    clock: Optional[str] = None
+    actions: list[PossessionActionOut] = []
     start_time: Optional[str] = None
     end_time: Optional[str] = None
     shot_clock_end: Optional[str] = None

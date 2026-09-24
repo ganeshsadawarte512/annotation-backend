@@ -130,6 +130,9 @@
   .add-player-row input.num-input { flex: 0 0 40px; }
   .add-player-row button { background: var(--link); color: #fff; border: none; border-radius: 3px; padding: 3px 8px; font-size: 11px; cursor: pointer; }
 
+  .add-action-btn { background: var(--link); color: #fff; border: none; padding: 6px 14px; border-radius: 4px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+  .add-action-btn:hover { background: #1c4a99; }
+
   .ann2-bottom { display: flex; gap: 20px; flex-wrap: nowrap; align-items: flex-start; overflow-x: auto; }
   .ballscreen-panel { flex: 0 0 420px; min-width: 420px; border: 1px solid var(--border); border-radius: 4px; padding: 10px; }
   .ballscreen-list { min-height: 90px; border: 1px solid var(--border); border-radius: 4px; padding: 8px; margin-bottom: 8px; max-height: 130px; overflow-y: auto; }
@@ -203,6 +206,8 @@
     <div class="field"><label>From Date</label><input type="text" id="fromDate" placeholder="YYYY-MM-DD"></div>
     <div class="filterbar-spacer"></div>
     <button class="btn" id="manageUsersBtn" style="border-color:var(--navy); color:var(--navy); padding:8px 16px; border-radius:4px; cursor:pointer;" onclick="openUsersModal()">Manage Users</button>
+    <button class="btn" id="importJsonBtn" style="border-color:var(--navy); color:var(--navy); padding:8px 16px; border-radius:4px; cursor:pointer;" onclick="document.getElementById('importJsonFile').click()">Import JSON</button>
+    <input type="file" id="importJsonFile" accept="application/json,.json" style="display:none;" onchange="importGameJson(this.files[0])">
     <button class="btn-primary" id="addGameBtn" style="border:none; padding:8px 16px; border-radius:4px; cursor:pointer;" onclick="openAddGameModal()">+ Add Game</button>
   </div>
   <div id="dashStatus"></div>
@@ -210,7 +215,7 @@
     <table>
       <thead>
         <tr>
-          <th>Date</th><th>M/F</th><th>J</th><th>Home</th><th>Visitor</th><th>Video</th><th>Poss</th>
+          <th>Date</th><th>M/F</th><th>J</th><th>H/ID</th><th>Home</th><th>V/ID</th><th>Visitor</th><th>Video</th><th>Poss</th>
           <th>InProcess</th><th>Clock/Vid</th><th>Complete</th><th>QA</th><th>Vid Err</th><th>Ann Err</th>
           <th>CompleteBy</th><th>QA By</th><th>GameId</th><th>Notes</th><th>Actions</th>
         </tr>
@@ -249,6 +254,7 @@
     <button class="back-btn" onclick="backToDashboard()">BACK TO GAMES</button>
     <div class="gid-field"><label>GameId</label><input type="text" id="annGameUid" readonly></div>
     <span class="meta" id="annMeta" style="color:var(--text-dim); font-size:12px;"></span>
+    <button id="deleteAllPossBtn" class="btn" style="display:none; margin-left:auto; border-color:#b0392b; color:#b0392b; padding:6px 14px; border-radius:4px; cursor:pointer;" onclick="deleteAllPossessions()">Delete All Possessions</button>
   </div>
   <div id="annStatus"></div>
 
@@ -332,8 +338,9 @@
             <select id="fAction"><option>2PT</option><option>3PT</option><option>AST</option><option>STL</option><option>LBTO</option><option>DEFENSIVE_REB</option><option>OFFENSIVE_REB</option><option>FLDN</option><option>FT</option><option>FTA</option></select>
           </div>
           <div class="field"><label>Result</label>
-            <select id="fResult"><option>Make</option><option>Miss</option><option>Offensive</option><option>Defensive</option><option>Lost Ball</option></select>
+            <select id="fResult"><option></option><option>Miss</option><option>Offensive</option><option>Defensive</option><option>Lost Ball</option></select>
           </div>
+          <div class="field"><label>&nbsp;</label><button type="button" class="add-action-btn" onclick="addPossessionAction()">+ Add Action</button></div>
         </div>
 
         <div class="ann2-roster-grid">
@@ -402,8 +409,11 @@
     <h3>Add New Game</h3>
     <div class="field"><label>Date</label><input type="text" id="ngDate" placeholder="YYYY-MM-DD"></div>
     <div class="field"><label>Home Team</label><input type="text" id="ngHome" placeholder="Home team"></div>
+    <div class="field"><label>H/ID</label><input type="text" id="ngHomeId" placeholder="Home team ID (for JSON matching)"></div>
     <div class="field"><label>Visitor Team</label><input type="text" id="ngVisitor" placeholder="Visitor team"></div>
+    <div class="field"><label>V/ID</label><input type="text" id="ngVisitorId" placeholder="Visitor team ID (for JSON matching)"></div>
     <div class="field"><label>M/F</label><select id="ngMF"><option>M</option><option>F</option></select></div>
+    <div class="field"><label>Game ID</label><input type="text" id="ngGameUid" placeholder="Leave blank to auto-generate"></div>
     <div class="modal-error" id="modalError"></div>
     <div class="modal-actions">
       <button onclick="closeAddGameModal()">Cancel</button>
@@ -418,7 +428,9 @@
     <h3>Edit Game</h3>
     <div class="field"><label>Date</label><input type="text" id="egDate" placeholder="YYYY-MM-DD"></div>
     <div class="field"><label>Home Team</label><input type="text" id="egHome"></div>
+    <div class="field"><label>H/ID</label><input type="text" id="egHomeId"></div>
     <div class="field"><label>Visitor Team</label><input type="text" id="egVisitor"></div>
+    <div class="field"><label>V/ID</label><input type="text" id="egVisitorId"></div>
     <div class="field"><label>M/F</label><select id="egMF"><option>M</option><option>F</option></select></div>
     <div class="modal-error" id="editModalError"></div>
     <div class="modal-actions">
@@ -439,6 +451,7 @@ let possessionsList = [];
 let selectedPossessionId = null;  // null = creating a new one
 let ballScreens = [];             // local array for the possession being edited
 let selectedBallScreenIdx = null;
+let possessionActions = [];       // local array of {team, player_number, action, result} for the possession being edited
 let shotXY = null;                // {x, y} 0..1 relative to court, or null
 
 function isAdmin(){ return currentUser && currentUser.role === "admin"; }
@@ -481,6 +494,8 @@ async function doLogin(){
     const data = await res.json();
     token = data.access_token;
     currentUser = { username: data.username, role: data.role };
+    localStorage.setItem('annotation_token', token);
+    localStorage.setItem('annotation_api_base', API_BASE);
     showTopbar();
     await goToDashboard();
   } catch(e){
@@ -492,10 +507,37 @@ async function doLogin(){
 
 function doLogout(message){
   token = null; currentUser = null; games = []; currentGame = null;
+  localStorage.removeItem('annotation_token');
+  localStorage.removeItem('annotation_api_base');
   document.getElementById('loginPass').value = "";
   document.getElementById('loginError').textContent = message || "";
   document.getElementById('topbar').style.display = 'none';
   showView('view-login');
+}
+
+// Called once on page load: if a token was saved from a previous session,
+// verify it's still valid and drop straight back into the dashboard instead
+// of forcing a fresh login on every page refresh.
+async function tryRestoreSession(){
+  const savedToken = localStorage.getItem('annotation_token');
+  const savedApiBase = localStorage.getItem('annotation_api_base');
+  if(!savedToken || !savedApiBase){ showView('view-login'); return; }
+  API_BASE = savedApiBase;
+  document.getElementById('apiBase').value = savedApiBase;
+  token = savedToken;
+  try {
+    const res = await fetch(API_BASE + "/auth/me", { headers: { "Authorization": "Bearer " + token } });
+    if(!res.ok) throw new Error("invalid session");
+    const user = await res.json();
+    currentUser = { username: user.username, role: user.role };
+    showTopbar();
+    await goToDashboard();
+  } catch(e){
+    token = null; currentUser = null;
+    localStorage.removeItem('annotation_token');
+    localStorage.removeItem('annotation_api_base');
+    showView('view-login');
+  }
 }
 
 function showTopbar(){
@@ -517,6 +559,7 @@ async function goToDashboard(){
   showView('view-dashboard');
   document.getElementById('addGameBtn').style.display = isAdmin() ? 'inline-block' : 'none';
   document.getElementById('manageUsersBtn').style.display = isAdmin() ? 'inline-block' : 'none';
+  document.getElementById('importJsonBtn').style.display = isAdmin() ? 'inline-block' : 'none';
   document.getElementById('lockedNote').textContent = isAdmin() ? '' : 'Adding games, editing status, and video upload are restricted to Admin accounts.';
   await loadGames();
 }
@@ -561,7 +604,8 @@ function renderGames(){
     <tr>
       <td>${g.date}</td><td>${g.mf}</td>
       <td><span class="video-cell-upload" onclick="downloadGameJson(${g.id})" title="Download full annotation data as JSON">J</span></td>
-      <td>${g.home_team}</td><td>${g.visitor_team}</td>
+      <td>${g.home_team_id || ''}</td><td>${g.home_team}</td>
+      <td>${g.visitor_team_id || ''}</td><td>${g.visitor_team}</td>
       <td>${videoCellHtml(g)}</td>
       <td><button class="poss-btn" onclick="openAnnotation(${g.id})">Poss</button></td>
       <td><input type="checkbox" class="dash-check" ${g.in_process ? 'checked' : ''} onchange="patchGame(${g.id}, 'in_process', this.checked)"></td>
@@ -633,6 +677,35 @@ async function uploadVideoForGame(gameId, file){
   }
 }
 
+async function importGameJson(file){
+  if(!file) return;
+  const statusEl = document.getElementById('dashStatus');
+  statusEl.innerHTML = `<div class="status-banner loading">Importing possessions...</div>`;
+  const form = new FormData();
+  form.append('file', file);
+  try {
+    const result = await api('/games/import-json', { method: 'POST', body: form });
+    const g = result.game;
+    const failedCount = result.possessions_failed || 0;
+    const bannerColor = failedCount ? 'background:#fdf0e3; color:#9a5b1e;' : 'background:#dff3e6; color:#1b7a3d;';
+    let msg = `Imported ${result.possessions_created} possession${result.possessions_created === 1 ? '' : 's'}`;
+    if(result.possessions_skipped) msg += ` (${result.possessions_skipped} already existed, skipped)`;
+    msg += ` into ${g.home_team} vs ${g.visitor_team} (${g.date}).`;
+    if(failedCount){
+      msg += `<br><strong>${failedCount} possession${failedCount === 1 ? '' : 's'} failed to import</strong> and were skipped:`;
+      msg += '<ul style="margin:4px 0 0 18px; padding:0;">' + result.errors.map(e =>
+        `<li>Q${e.period ?? '?'} ${e.start || '?'}\u2013${e.end || '?'}: ${e.error}</li>`
+      ).join('') + '</ul>';
+    }
+    statusEl.innerHTML = `<div class="status-banner" style="${bannerColor}">${msg}</div>`;
+    await loadGames();
+  } catch(e){
+    statusEl.innerHTML = `<div class="status-banner error">Import failed: ${e.message}</div>`;
+  } finally {
+    document.getElementById('importJsonFile').value = '';
+  }
+}
+
 let filterTimeout;
 document.getElementById('filterTeam').addEventListener('input', () => { clearTimeout(filterTimeout); filterTimeout = setTimeout(loadGames, 400); });
 document.getElementById('fromDate').addEventListener('change', loadGames);
@@ -687,16 +760,26 @@ async function removeUser(userId){
 }
 
 function openAddGameModal(){ document.getElementById('addGameModal').classList.remove('hidden'); document.getElementById('modalError').textContent = ""; }
-function closeAddGameModal(){ document.getElementById('addGameModal').classList.add('hidden'); ['ngDate','ngHome','ngVisitor'].forEach(id=>document.getElementById(id).value = ''); }
+function closeAddGameModal(){ document.getElementById('addGameModal').classList.add('hidden'); ['ngDate','ngHome','ngHomeId','ngVisitor','ngVisitorId','ngGameUid'].forEach(id=>document.getElementById(id).value = ''); }
 async function saveNewGame(){
   const errEl = document.getElementById('modalError');
   const date = document.getElementById('ngDate').value.trim();
   const home_team = document.getElementById('ngHome').value.trim();
+  const home_team_id = document.getElementById('ngHomeId').value.trim();
   const visitor_team = document.getElementById('ngVisitor').value.trim();
+  const visitor_team_id = document.getElementById('ngVisitorId').value.trim();
+  const game_uid = document.getElementById('ngGameUid').value.trim();
   const mf = document.getElementById('ngMF').value;
   if(!date || !home_team || !visitor_team){ errEl.textContent = "Date, home team, and visitor team are required."; return; }
   try {
-    await api('/games', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date, home_team, visitor_team, mf }) });
+    await api('/games', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        date, home_team, home_team_id: home_team_id || null,
+        visitor_team, visitor_team_id: visitor_team_id || null,
+        mf, game_uid: game_uid || null,
+      })
+    });
     closeAddGameModal();
     await loadGames();
   } catch(e){ errEl.textContent = e.message; }
@@ -710,7 +793,9 @@ function openEditGameModal(gameId){
   editingGameId = gameId;
   document.getElementById('egDate').value = g.date;
   document.getElementById('egHome').value = g.home_team;
+  document.getElementById('egHomeId').value = g.home_team_id || '';
   document.getElementById('egVisitor').value = g.visitor_team;
+  document.getElementById('egVisitorId').value = g.visitor_team_id || '';
   document.getElementById('egMF').value = g.mf;
   document.getElementById('editModalError').textContent = '';
   document.getElementById('editGameModal').classList.remove('hidden');
@@ -723,14 +808,19 @@ async function saveEditedGame(){
   const errEl = document.getElementById('editModalError');
   const date = document.getElementById('egDate').value.trim();
   const home_team = document.getElementById('egHome').value.trim();
+  const home_team_id = document.getElementById('egHomeId').value.trim();
   const visitor_team = document.getElementById('egVisitor').value.trim();
+  const visitor_team_id = document.getElementById('egVisitorId').value.trim();
   const mf = document.getElementById('egMF').value;
   if(!date || !home_team || !visitor_team){ errEl.textContent = "Date, home team, and visitor team are required."; return; }
   try {
     await api(`/games/${editingGameId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date, home_team, visitor_team, mf })
+      body: JSON.stringify({
+        date, home_team, home_team_id: home_team_id || null,
+        visitor_team, visitor_team_id: visitor_team_id || null, mf,
+      })
     });
     closeEditGameModal();
     await loadGames();
@@ -901,6 +991,7 @@ async function openAnnotation(gameId){
 
     const gate = document.getElementById('adminGateMsg');
     gate.innerHTML = isAdmin() ? '' : `<div class="admin-only-msg">You're logged in as an annotator. You can log, edit, and update possessions and rosters — deleting a possession is restricted to Admin accounts.</div>`;
+    document.getElementById('deleteAllPossBtn').style.display = isAdmin() ? 'inline-block' : 'none';
 
     await loadPossessions();
     clearFormForNew();
@@ -916,6 +1007,9 @@ async function loadPossessions(){
     possessionsList = await api(`/games/${currentGame.id}/possessions`);
     document.getElementById('annStatus').innerHTML = "";
     renderPossessionList();
+    const count = possessionsList.length;
+    document.getElementById('annGameUid').title = `${count} possession${count === 1 ? '' : 's'} added`;
+    document.getElementById('ann2Matchup').textContent = `${currentGame.visitor_team} at ${currentGame.home_team} \u2014 ${count} possession${count === 1 ? '' : 's'}`;
   } catch(e){
     document.getElementById('annStatus').innerHTML = `<div class="status-banner error">${e.message}</div>`;
   }
@@ -924,7 +1018,10 @@ async function loadPossessions(){
 function renderPossessionList(){
   const el = document.getElementById('ann2List');
   el.innerHTML = possessionsList.map(p => {
-    const summary = `${p.team ? '#' + (p.player_number||'') + ' ' + p.team.split(' ')[0] : ''}: ${p.action || ''}${p.result ? ' (' + p.result + ')' : ''}`;
+    const actions = p.actions || [];
+    const summary = actions.map(a =>
+      `#${a.player_number || ''} ${(a.team || '').split(' ')[0]}: ${a.action}${a.result ? ' ' + a.result : ''}`
+    ).join('<br>');
     return `
       <div class="ann2-row ${p.id === selectedPossessionId ? 'selected' : ''}" onclick="selectPossession(${p.id})">
         <span>Q${p.quarter}</span><span>${p.start_time || p.clock || ''}</span><span>${p.end_time || ''}</span>
@@ -933,9 +1030,39 @@ function renderPossessionList(){
   }).join('');
 }
 
+function addPossessionAction(){
+  const team = document.getElementById('fTeam').value;
+  const player_number = document.getElementById('fPlayerNumber').value.trim() || null;
+  const action = document.getElementById('fAction').value;
+  const result = document.getElementById('fResult').value || null;
+  if(!team || !action) return;
+  possessionActions.push({ team, player_number, action, result });
+  document.getElementById('fPlayerNumber').value = '';
+  renderPossessionActions();
+}
+function removePossessionAction(idx){
+  possessionActions.splice(idx, 1);
+  renderPossessionActions();
+}
+function renderPossessionActions(){
+  const el = document.getElementById('actionsList');
+  if(!el) return;  // list panel removed from the UI; possessionActions array still drives saving
+  if(!possessionActions.length){
+    el.innerHTML = `<div class="actions-empty">No actions added yet — fill in Team / Player# / Action / Result above and click + Add Action. Add more than one to log several events in the same possession (e.g. OFFENSIVE_REB then FG).</div>`;
+    return;
+  }
+  el.innerHTML = possessionActions.map((a, idx) => `
+    <div class="action-row">
+      <span>#${a.player_number || ''} ${a.team}</span>
+      <span>${a.action}${a.result ? ' — ' + a.result : ''}</span>
+      <span class="action-remove" onclick="removePossessionAction(${idx})" title="Remove">✕</span>
+    </div>`).join('');
+}
+
 function clearFormForNew(){
   selectedPossessionId = null;
   ballScreens = [];
+  possessionActions = [];
   shotXY = null;
   document.getElementById('delBtn').style.display = 'none';
   ['fStart','fEnd','fShotClock','fVideoTime','fPlayerNumber'].forEach(id => document.getElementById(id).value = '');
@@ -950,6 +1077,7 @@ function clearFormForNew(){
   onRosterToggle();
   populateBallScreenSelects();
   renderBallScreenList();
+  renderPossessionActions();
   updateShotDot();
   renderPossessionList();
 }
@@ -973,10 +1101,10 @@ function selectPossession(id){
   document.getElementById('fInbound').value = p.inbound_type || '';
   document.getElementById('fOffenseScheme').value = p.offense_scheme || '';
   document.getElementById('fDefenseScheme').value = p.defense_scheme || '';
-  document.getElementById('fTeam').value = p.team || currentGame.home_team;
-  document.getElementById('fPlayerNumber').value = p.player_number || '';
-  document.getElementById('fAction').value = p.action || '2PT';
-  document.getElementById('fResult').value = p.result || 'Make';
+  document.getElementById('fTeam').value = currentGame.home_team;
+  document.getElementById('fPlayerNumber').value = '';
+  document.getElementById('fAction').value = '2PT';
+  document.getElementById('fResult').value = 'Make';
 
   document.querySelectorAll('input[name=fShotAction]').forEach(r => r.checked = (r.value === p.shot_action));
   document.querySelectorAll('input[name=fContested]').forEach(r => r.checked = (r.value === (p.contested === true ? 'yes' : p.contested === false ? 'no' : '')));
@@ -987,6 +1115,9 @@ function selectPossession(id){
   setCheckedFromText('deflected', p.deflected_pass_by);
   setCheckedFromText('shotdef', p.shot_defenders);
   populateBallScreenSelects();
+
+  possessionActions = (p.actions || []).map(a => ({ team: a.team, player_number: a.player_number, action: a.action, result: a.result }));
+  renderPossessionActions();
 
   try { ballScreens = p.ball_screens ? JSON.parse(p.ball_screens) : []; } catch(e){ ballScreens = []; }
   selectedBallScreenIdx = null;
@@ -1101,13 +1232,31 @@ function collectFormPayload(){
   const shotActionEl = document.querySelector('input[name=fShotAction]:checked');
   const contestedEl = document.querySelector('input[name=fContested]:checked');
   const paintTouchEl = document.querySelector('input[name=fPaintTouch]:checked');
+  // If nothing was explicitly queued via "+ Add Action", fall back to whatever
+  // is currently sitting in Team/Player#/Action/Result so a plain single-action
+  // save (the common case) still works without an extra click.
+  let actions = possessionActions;
+  if(!actions.length){
+    const team = document.getElementById('fTeam').value;
+    const action = document.getElementById('fAction').value;
+    if(team && action){
+      actions = [{
+        team,
+        player_number: document.getElementById('fPlayerNumber').value || null,
+        action,
+        result: document.getElementById('fResult').value || null,
+      }];
+    }
+  }
   return {
     quarter: parseInt(document.getElementById('fQuarter').value, 10) || 1,
-    clock: document.getElementById('fStart').value || '00:00',
-    team: document.getElementById('fTeam').value,
-    player_number: document.getElementById('fPlayerNumber').value || null,
-    action: document.getElementById('fAction').value,
-    result: document.getElementById('fResult').value,
+    clock: document.getElementById('fStart').value || null,
+    actions: actions.map(a => ({
+      team: a.team,
+      player_number: a.player_number || null,
+      action: a.action,
+      result: a.result || null,
+    })),
     start_time: document.getElementById('fStart').value || null,
     end_time: document.getElementById('fEnd').value || null,
     shot_clock_end: document.getElementById('fShotClock').value || null,
@@ -1161,8 +1310,23 @@ async function deleteCurrentPossession(){
   }
 }
 
+async function deleteAllPossessions(){
+  if(!currentGame) return;
+  const count = possessionsList.length;
+  if(!count){ return; }
+  const sure = confirm(`Delete all ${count} possession${count === 1 ? '' : 's'} for ${currentGame.home_team} vs ${currentGame.visitor_team}? This can't be undone.`);
+  if(!sure) return;
+  try {
+    await api(`/games/${currentGame.id}/possessions`, { method: 'DELETE' });
+    await loadPossessions();
+    clearFormForNew();
+  } catch(e){
+    document.getElementById('annStatus').innerHTML = `<div class="status-banner error">${e.message}</div>`;
+  }
+}
+
 /* Init */
-showView('view-login');
+tryRestoreSession();
 </script>
 
 </body>
