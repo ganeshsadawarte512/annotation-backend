@@ -30,6 +30,7 @@ class Game(Base):
     id = Column(Integer, primary_key=True, index=True)
     game_uid = Column(String, unique=True, index=True, default=lambda: str(uuid.uuid4()))
     date = Column(String, nullable=False)  # YYYY-MM-DD
+    priority = Column(Integer, default=1)  # 1 = highest priority
     mf = Column(String(1), default="M")  # M or F
     home_team = Column(String, nullable=False)
     home_team_id = Column(String, nullable=True)
@@ -71,9 +72,16 @@ class Possession(Base):
     id = Column(Integer, primary_key=True, index=True)
     game_id = Column(Integer, ForeignKey("games.id"), nullable=False)
 
-    # Basic play info
     quarter = Column(Integer, nullable=False)
-    clock = Column(String, nullable=True)  # mm:ss - legacy field, kept for backward compatibility
+    clock = Column(String, nullable=False)  # mm:ss - kept for backward compatibility
+
+    # Basic play info — kept for backward compatibility, but now optional
+    # since one possession can hold multiple events (see PossessionEvent
+    # below) instead of a single team/action/result.
+    team = Column(String, nullable=True)
+    player_number = Column(String, nullable=True)
+    action = Column(String, nullable=True)
+    result = Column(String, nullable=True)
 
     # Timing detail
     start_time = Column(String, nullable=True)       # game clock at possession start, e.g. "09:59:00"
@@ -86,7 +94,7 @@ class Possession(Base):
     shot_action = Column(String, nullable=True)   # e.g. "CAS", "OTD" (catch-and-shoot / off-the-dribble)
     contested = Column(Boolean, nullable=True)
     direction = Column(String, nullable=True)     # e.g. "Left", "Right"
-    play_type = Column(String, nullable=True)     # ISO Player selection
+    play_type = Column(String, nullable=True)     # e.g. "ISO Player", "PnR Ball Handler"
     shot_x = Column(String, nullable=True)         # court-diagram coordinates, stored as text (e.g. "0.62")
     shot_y = Column(String, nullable=True)
 
@@ -113,26 +121,37 @@ class Possession(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     game = relationship("Game", back_populates="possessions")
-    actions = relationship(
-        "PossessionAction",
+    events = relationship(
+        "PossessionEvent",
         back_populates="possession",
         cascade="all, delete-orphan",
-        order_by="PossessionAction.sort_order",
+        order_by="PossessionEvent.id",
     )
 
 
-class PossessionAction(Base):
-    """One player+action+result entry within a possession. A possession can
-    hold several of these — e.g. an offensive rebound followed by the made
-    field goal it led to — instead of being limited to a single action."""
-    __tablename__ = "possession_actions"
+# Fixed action list for a possession event — matches the codes actually used
+# in ShotTracker-style play-by-play data (2PT/3PT/FT/FTA make-or-miss are
+# tracked as separate codes rather than an action+result pair).
+POSSESSION_EVENT_ACTIONS = [
+    "2PT", "3PT", "AST", "STL", "LBTO",
+    "DEFENSIVE_REB", "OFFENSIVE_REB", "FLDN", "FT", "FTA",
+]
+
+
+class PossessionEvent(Base):
+    """One discrete play within a possession — a possession is often more
+    than one event (e.g. an offensive rebound, then an assist, then a made
+    shot), so these are stored as a list attached to their possession
+    rather than a single team/action/result on the possession itself."""
+    __tablename__ = "possession_events"
 
     id = Column(Integer, primary_key=True, index=True)
     possession_id = Column(Integer, ForeignKey("possessions.id"), nullable=False)
-    sort_order = Column(Integer, default=0)
-    team = Column(String, nullable=False)
+    team = Column(String, nullable=True)
     player_number = Column(String, nullable=True)
-    action = Column(String, nullable=False)
-    result = Column(String, nullable=True)
+    action = Column(String, nullable=False)  # one of POSSESSION_EVENT_ACTIONS
+    result = Column(String, nullable=True)   # e.g. "Make"/"Miss" — only meaningful for some actions
+    created_by = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
-    possession = relationship("Possession", back_populates="actions")
+    possession = relationship("Possession", back_populates="events")

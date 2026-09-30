@@ -28,12 +28,12 @@ class UserCreate(BaseModel):
 # ---------- Games ----------
 class GameCreate(BaseModel):
     date: str
+    priority: int = 1
     mf: str = "M"
     home_team: str
     home_team_id: Optional[str] = None
     visitor_team: str
     visitor_team_id: Optional[str] = None
-    game_uid: Optional[str] = None  # admin can set this manually at creation; auto-generated if omitted
 
 
 class GameOut(BaseModel):
@@ -41,11 +41,10 @@ class GameOut(BaseModel):
     id: int
     game_uid: str
     date: str
+    priority: int
     mf: str
     home_team: str
-    home_team_id: Optional[str]
     visitor_team: str
-    visitor_team_id: Optional[str]
     video_path: Optional[str]
     video_status: str
     in_process: bool
@@ -68,6 +67,7 @@ class GameUpdate(BaseModel):
     it if unchecked) — the frontend never sends those two fields directly.
     date/home_team/visitor_team/mf/home_team_id/visitor_team_id are
     admin-only; the backend rejects them from an annotator."""
+    priority: Optional[int] = None
     in_process: Optional[bool] = None
     clock_vid_ok: Optional[bool] = None
     is_complete: Optional[bool] = None
@@ -99,29 +99,13 @@ class PlayerOut(BaseModel):
 
 
 # ---------- Possessions ----------
-class PossessionActionCreate(BaseModel):
-    team: str
-    player_number: Optional[str] = None
-    action: str
-    result: Optional[str] = None
-
-
-class PossessionActionOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    id: int
-    team: str
-    player_number: Optional[str] = None
-    action: str
-    result: Optional[str] = None
-
-
 class PossessionCreate(BaseModel):
     quarter: int
-    clock: Optional[str] = None  # legacy mm:ss field; start_time/end_time supersede it
-
-    # One or more player+action+result entries logged for this possession
-    # (e.g. an offensive rebound followed by the field goal it led to).
-    actions: list[PossessionActionCreate] = []
+    clock: str
+    team: Optional[str] = None
+    player_number: Optional[str] = None
+    action: Optional[str] = None
+    result: Optional[str] = None
 
     # Timing detail
     start_time: Optional[str] = None
@@ -154,13 +138,36 @@ class PossessionCreate(BaseModel):
     ball_screens: Optional[str] = None
 
 
+# ---------- Possession Events (multiple plays within one possession) ----------
+class PossessionEventCreate(BaseModel):
+    team: Optional[str] = None
+    player_number: Optional[str] = None
+    action: str  # one of: 2PT, 3PT, AST, STL, LBTO, DEFENSIVE_REB, OFFENSIVE_REB, FLDN, FT, FTA
+    result: Optional[str] = None
+
+
+class PossessionEventOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    possession_id: int
+    team: Optional[str] = None
+    player_number: Optional[str] = None
+    action: str
+    result: Optional[str] = None
+    created_by: Optional[str] = None
+    created_at: datetime
+
+
 class PossessionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     game_id: int
     quarter: int
-    clock: Optional[str] = None
-    actions: list[PossessionActionOut] = []
+    clock: str
+    team: Optional[str] = None
+    player_number: Optional[str] = None
+    action: Optional[str] = None
+    result: Optional[str] = None
     start_time: Optional[str] = None
     end_time: Optional[str] = None
     shot_clock_end: Optional[str] = None
@@ -185,3 +192,4 @@ class PossessionOut(BaseModel):
     ball_screens: Optional[str] = None
     created_by: Optional[str]
     created_at: datetime
+    events: list[PossessionEventOut] = []

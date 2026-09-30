@@ -1,11 +1,10 @@
 from typing import Optional
 import json as json_lib
-import uuid
+import re
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import Response
-from sqlalchemy import and_, or_
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -14,298 +13,6 @@ from app.storage import get_storage
 from app import models, schemas
 
 router = APIRouter(prefix="/games", tags=["games"])
-
-
-# ---------- Pre-annotated game import (ShotTracker-style export) ----------
-# Maps the vendor's shot-attribute / scheme codes onto the labels our own
-# dropdowns use, so imported data lines up with what an annotator would have
-# picked by hand.
-_SHOT_TYPE_MAP = {
-    "JUMPSHOT": "JumpShot", "PULLUPJUMPSHOT": "JumpShot",
-    "DRIVINGLAYUP": "DriveLayup", "LAYUP": "Layup",
-    "TIPIN": "Tipin", "TIPINLAYUP": "Tipin",
-    "DUNK": "Dunk", "STEPBACKJUMPSHOT": "Stepback/Sidestep jumper",
-    "TURNAROUNDJUMPSHOT": "Turnaround Jumper", "HOOKSHOT": "Hook",
-    "FLOATINGJUMPSHOT": "Floater", "ALLEYOOP": "Alleyoop",
-}
-_DIRECTION_MAP = {"DIRECTIONLEFT": "Left", "DIRECTIONRIGHT": "Right"}
-_OFFENSE_MAP = {
-    "motion": "Motion", "transition": "Transaction", "dribbledrive": "Dribble Drive",
-    "flex": "Flex", "floppy": "Floppy", "highlow": "High-Low", "horn": "Horn",
-    "isolation": "Isolation", "iverson": "Iverson", "princeton": "Princeton/Backdoor",
-    "backdoor": "Princeton/Backdoor", "spread": "Spread",
-}
-_DEFENSE_MAP = {
-    "mantoman": "Man-to-Man", "fullcourtmantoman": "Full-Court Man-to-Man",
-    "halfcourtpress": "Half-Court Pressing Man-to-Man", "zone": "Zone",
-    "zone131": "1-3-1 Zone", "zone23": "2-3 Zone", "zone32": "3-2 Zone",
-    "matchupzone": "Matchup Zone", "boxandone": "Box-and-1 Defense",
-    "triangleandtwo": "Triangle-and-2 Defense",
-}
-# Action codes that already match our Action dropdown exactly (AST, STL, LBTO,
-# DEFENSIVE_REB, OFFENSIVE_REB, FLDN, FT, FTA) pass through untouched below;
-# only FG/FGA need translating, since the vendor splits makes vs misses into
-# separate event types instead of an action+result pair.
-_RESULT_BY_ACTION = {
-    "OFFENSIVE_REB": "Offensive",
-    "DEFENSIVE_REB": "Defensive",
-    "LBTO": "Lost Ball",
-    "FT": "Make",
-    "FTA": "Miss",
-}
-
-
-def _parse_period_to_quarter(period: Optional[str]) -> int:
-    """'H1' -> 1, 'H2' -> 2, 'OT1' -> 5, etc. Falls back to 1 if unparseable."""
-    if not period:
-        return 1
-    period = period.upper()
-    digits = "".join(ch for ch in period if ch.isdigit())
-    n = int(digits) if digits else 1
-    return 4 + n if period.startswith("OT") else n
-
-
-def _clean_shot_clock(raw) -> Optional[str]:
-    try:
-        val = float(raw)
-    except (TypeError, ValueError):
-        return None
-    if val <= 0:
-        return None
-    return f"{min(val, 30):.1f}"
-
-
-def _format_players(player_ids, player_lookup: dict) -> Optional[str]:
-    """Turns a list of vendor player ids into the '#num Name' comma-joined
-    text our on-court checkboxes match against (see rosterForTeam() in the
-    frontend). Ids with no roster match are skipped rather than guessed at."""
-    labels = []
-    for pid in player_ids or []:
-        info = player_lookup.get(str(pid))
-        if info and info.get("jersey") and info.get("name"):
-            labels.append(f"#{info['jersey']} {info['name']}")
-    return ", ".join(labels) if labels else None
-
-
-@router.post("/import-json")
-def import_game_json(
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(require_admin),  # blocked for non-admins
-):
-    """Import a pre-annotated game export. Matches an existing Game by its
-    H/ID + V/ID (set manually when the game was added) and the game date;
-    if none matches, a new Game row is created from the file itself."""
-    try:
-        raw = json_lib.loads(file.file.read())
-    except (ValueError, UnicodeDecodeError):
-        raise HTTPException(status_code=400, detail="That file isn't valid JSON.")
-
-    try:
-        game_body = raw["gameDetails"]["retBody"]
-        video_body = raw.get("videoDetails", {}) or {}
-        possessions_raw = raw["possessions"]
-        roster_home = (raw.get("rosterHome") or {}).get("retBody", {}) or {}
-        roster_away = (raw.get("rosterAway") or {}).get("retBody", {}) or {}
-    except (KeyError, TypeError):
-        raise HTTPException(
-            status_code=400,
-            detail="Unrecognized JSON shape — expected gameDetails, videoDetails, "
-                   "rosterHome, rosterAway, and possessions.",
-        )
-
-    team1_id, team2_id = str(game_body.get("team1Id")), str(game_body.get("team2Id"))
-    team1_name, team2_name = game_body.get("team1Name"), game_body.get("team2Name")
-    home_id = str(game_body.get("homeTeamId") or team1_id)
-    if home_id == team1_id:
-        home_team, home_team_id = team1_name, team1_id
-        visitor_team, visitor_team_id = team2_name, team2_id
-    else:
-        home_team, home_team_id = team2_name, team2_id
-        visitor_team, visitor_team_id = team1_name, team1_id
-
-    date_str = (video_body.get("gameDate") or "")[:10] or None
-    mf = "F" if (game_body.get("gender") or "").upper().startswith("W") else "M"
-
-    # Player id -> jersey/name/team, built from both rosters. Also
-    # auto-provisions each team's Player rows so on-court checkboxes work
-    # immediately after import, without a separate manual roster-entry step.
-    team_names_by_id = {home_team_id: home_team, visitor_team_id: visitor_team}
-    player_lookup = {}
-    for roster in (roster_home, roster_away):
-        roster_team_id = str((roster.get("team") or {}).get("id", ""))
-        team_name = team_names_by_id.get(roster_team_id) or (roster.get("team") or {}).get("name")
-        for p in roster.get("players", []):
-            jersey = p.get("jerseyNumberStr") or str(p.get("jerseyNumber", ""))
-            name = f"{p.get('firstName', '')} {p.get('lastName', '')}".strip()
-            player_lookup[str(p.get("id"))] = {"jersey": jersey, "name": name}
-            if team_name and jersey and name:
-                exists = (
-                    db.query(models.Player)
-                    .filter_by(team_name=team_name, jersey_number=jersey)
-                    .first()
-                )
-                if not exists:
-                    db.add(models.Player(
-                        team_name=team_name, jersey_number=jersey, player_name=name,
-                        created_by=current_user.username,
-                    ))
-    db.flush()
-
-    def team_name_for(team_id):
-        team_id = str(team_id)
-        if team_id == home_team_id:
-            return home_team
-        if team_id == visitor_team_id:
-            return visitor_team
-        return team_id
-
-    # Match an existing (likely manually-created) Game by its H/ID + V/ID —
-    # in either home/visitor orientation — and date; else create a new one.
-    game = None
-    if date_str:
-        game = (
-            db.query(models.Game)
-            .filter(
-                models.Game.date == date_str,
-                or_(
-                    and_(models.Game.home_team_id == home_team_id, models.Game.visitor_team_id == visitor_team_id),
-                    and_(models.Game.home_team_id == visitor_team_id, models.Game.visitor_team_id == home_team_id),
-                ),
-            )
-            .first()
-        )
-    if not game:
-        game = models.Game(
-            game_uid=str(game_body.get("id") or uuid.uuid4()),
-            date=date_str or "",
-            mf=mf,
-            home_team=home_team, home_team_id=home_team_id,
-            visitor_team=visitor_team, visitor_team_id=visitor_team_id,
-            created_by=current_user.username,
-        )
-        db.add(game)
-        db.flush()
-
-    created, skipped, failed = 0, 0, []
-    for idx, item in enumerate(possessions_raw):
-        # Each possession gets its own SAVEPOINT: if something about this one
-        # record is malformed, only its own insert rolls back — the rest of
-        # the batch still imports instead of the whole request dying silently.
-        try:
-            with db.begin_nested():
-                quarter = _parse_period_to_quarter(item.get("period"))
-                start_time = item.get("startGameClock")
-                end_time = item.get("endGameClock")
-
-                # Idempotent re-import: skip a possession already pulled in before.
-                dup = (
-                    db.query(models.Possession)
-                    .filter_by(game_id=game.id, quarter=quarter, start_time=start_time, end_time=end_time)
-                    .first()
-                )
-                if dup:
-                    skipped += 1
-                    continue
-
-                events = item.get("events", {}) or {}
-                labeled = item.get("labeledEvents", {}) or {}
-                shot = item.get("shot", {}) or {}
-
-                offense_scheme = None
-                for o in labeled.get("offenses") or []:
-                    offense_scheme = _OFFENSE_MAP.get(o.lower(), o)
-                    break
-                defense_scheme = None
-                for d in labeled.get("defenses") or []:
-                    defense_scheme = _DEFENSE_MAP.get(d.lower(), d)
-                    break
-
-                shot_type = shot_action = direction = None
-                contested = None
-                for attr in shot.get("attributes") or []:
-                    if attr in _SHOT_TYPE_MAP:
-                        shot_type = _SHOT_TYPE_MAP[attr]
-                    elif attr in _DIRECTION_MAP:
-                        direction = _DIRECTION_MAP[attr]
-                    elif attr in ("CAS", "OTD"):
-                        shot_action = attr
-                    elif attr == "GUARDED":
-                        contested = True
-                    elif attr == "UNGUARDED":
-                        contested = False
-
-                inner_actions = item.get("possessions") or []
-                shot_clock_end = None
-                for a in inner_actions:
-                    if a.get("possessionType") in ("FGA", "FG", "FT", "FTA"):
-                        shot_clock_end = _clean_shot_clock(a.get("shotClock"))
-                if shot_clock_end is None and inner_actions:
-                    shot_clock_end = _clean_shot_clock(inner_actions[-1].get("shotClock"))
-
-                poss = models.Possession(
-                    game_id=game.id,
-                    quarter=quarter,
-                    start_time=start_time,
-                    end_time=end_time,
-                    shot_clock_end=shot_clock_end,
-                    video_time_start=labeled.get("videoTimeMark"),
-                    shot_type=shot_type,
-                    shot_action=shot_action,
-                    contested=contested,
-                    direction=direction,
-                    passes=events.get("passes"),
-                    reversals=events.get("ballReversals"),
-                    paint_touch=events.get("paintTouch"),
-                    offense_scheme=offense_scheme,
-                    defense_scheme=defense_scheme,
-                    offense_on_court=_format_players(item.get("lineupPlayers"), player_lookup),
-                    defense_on_court=_format_players(item.get("opponentLineupPlayers"), player_lookup),
-                    created_by=current_user.username,
-                )
-
-                for i, a in enumerate(inner_actions):
-                    pt = a.get("possessionType")
-                    info = player_lookup.get(str(a.get("playerId")), {})
-                    team_name = team_name_for(a.get("teamId")) if a.get("teamId") is not None else "Unknown"
-                    player_number = info.get("jersey")
-
-                    if pt in ("FGA", "FG"):
-                        action = "3PT" if a.get("is3Point") else "2PT"
-                        result = "Miss" if pt == "FGA" else "Make"
-                    else:
-                        # Fall back to a placeholder rather than None — the
-                        # column is required, and a missing/unknown vendor
-                        # code shouldn't be able to sink the whole possession.
-                        action = pt or "UNKNOWN"
-                        result = _RESULT_BY_ACTION.get(pt)
-
-                    poss.actions.append(models.PossessionAction(
-                        sort_order=i, team=team_name, player_number=player_number,
-                        action=action, result=result,
-                    ))
-
-                db.add(poss)
-                db.flush()  # surface any constraint violation now, inside this savepoint
-                created += 1
-        except Exception as e:
-            failed.append({
-                "index": idx,
-                "period": item.get("period"),
-                "start": item.get("startGameClock"),
-                "end": item.get("endGameClock"),
-                "error": str(e),
-            })
-
-    db.commit()
-    db.refresh(game)
-    return {
-        "game": schemas.GameOut.model_validate(game).model_dump(mode="json"),
-        "possessions_created": created,
-        "possessions_skipped": skipped,
-        "possessions_failed": len(failed),
-        "errors": failed[:20],  # capped so a badly-formed file can't blow up the response
-    }
 
 
 @router.get("", response_model=list[schemas.GameOut])
@@ -332,18 +39,9 @@ def create_game(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_admin),  # blocked for non-admins
 ):
-    data = payload.model_dump()
-    game_uid = (data.pop("game_uid", None) or "").strip() or str(uuid.uuid4())
-    game = models.Game(game_uid=game_uid, **data, created_by=current_user.username)
+    game = models.Game(**payload.model_dump(), created_by=current_user.username)
     db.add(game)
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(
-            status_code=400,
-            detail="That Game ID is already in use — choose a different one.",
-        )
+    db.commit()
     db.refresh(game)
     return game
 
@@ -363,7 +61,7 @@ def update_game(
     # Core game info (date/teams) can only be changed by an admin — this is
     # the "manage the whole game record" capability, distinct from the
     # day-to-day status checkboxes any logged-in user can tick.
-    core_fields = {"date", "home_team", "home_team_id", "visitor_team", "visitor_team_id", "mf"}
+    core_fields = {"date", "priority", "home_team", "home_team_id", "visitor_team", "visitor_team_id", "mf"}
     if core_fields & data.keys() and current_user.role != models.UserRole.admin:
         raise HTTPException(
             status_code=403,
@@ -458,9 +156,13 @@ def export_game_json(
                 d["ball_screens"] = json_lib.loads(d["ball_screens"])
             except (ValueError, TypeError):
                 pass  # leave as raw string if it wasn't valid JSON
-        d["actions"] = [
-            {"team": a.team, "player_number": a.player_number, "action": a.action, "result": a.result}
-            for a in p.actions
+        d["events"] = [
+            {
+                "id": ev.id, "team": ev.team, "player_number": ev.player_number,
+                "action": ev.action, "result": ev.result,
+                "created_at": ev.created_at.isoformat() if ev.created_at else None,
+            }
+            for ev in p.events
         ]
         return d
 
@@ -479,3 +181,365 @@ def export_game_json(
         media_type="application/json",
         headers={"Content-Disposition": f'attachment; filename="{safe_name}.json"'},
     )
+
+
+@router.post("/import-json")
+def import_game_json(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """One-shot import used by the dashboard's "Import JSON" button: takes
+    a raw ShotTracker export (a JSON array of possession records, each
+    carrying the game's own gameId/teamId/opponentTeamId/startTimestamp),
+    finds or creates the matching Game row, then imports every possession
+    into it using the same parser as /{game_id}/import-possessions.
+
+    Team names aren't present in this export format (only numeric
+    teamId/opponentTeamId), so a newly-created game gets placeholder
+    names like "Team 4571" — rename it from the dashboard afterward.
+    Re-importing the same file reuses the same game (matched by its
+    ShotTracker gameId, stored in game_uid) rather than creating a
+    duplicate game, but does not deduplicate individual possessions —
+    importing the same file twice into the same game adds them twice.
+    """
+    raw_bytes = file.file.read()
+    try:
+        raw = json_lib.loads(raw_bytes)
+    except (json_lib.JSONDecodeError, UnicodeDecodeError):
+        raise HTTPException(status_code=400, detail="That file isn't valid JSON.")
+
+    if isinstance(raw, dict) and "possessions" in raw:
+        items = raw["possessions"]
+    elif isinstance(raw, list):
+        items = raw
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Expected a JSON array of possessions, or an object with a 'possessions' key.",
+        )
+
+    if not items or not isinstance(items[0], dict):
+        raise HTTPException(status_code=400, detail="No possessions found in that file.")
+
+    first = items[0]
+    shot_uid = first.get("gameId")
+
+    game = None
+    if shot_uid:
+        game = db.query(models.Game).filter(models.Game.game_uid == str(shot_uid)).first()
+
+    if not game:
+        start_ts = first.get("startTimestamp")
+        if isinstance(start_ts, (int, float)):
+            date_str = datetime.utcfromtimestamp(start_ts / 1000).strftime("%Y-%m-%d")
+        else:
+            date_str = datetime.utcnow().strftime("%Y-%m-%d")
+        home_id = first.get("teamId")
+        away_id = first.get("opponentTeamId")
+
+        def resolve_team_name(team_id):
+            """If this team ID was already imported before and someone renamed
+            its placeholder to a real name, reuse that name instead of
+            regenerating "Team {id}" again — otherwise every new game for the
+            same real-world team gets a fresh placeholder, and your roster
+            (which is looked up by team name) looks like it's been wiped."""
+            if team_id is None:
+                return None
+            tid = str(team_id)
+            placeholder = f"Team {tid}"
+            for home_col, id_col in (
+                (models.Game.home_team, models.Game.home_team_id),
+                (models.Game.visitor_team, models.Game.visitor_team_id),
+            ):
+                hit = (
+                    db.query(home_col)
+                    .filter(id_col == tid, home_col != placeholder)
+                    .order_by(models.Game.created_at.desc())
+                    .first()
+                )
+                if hit and hit[0]:
+                    return hit[0]
+            return placeholder
+
+        game = models.Game(
+            date=date_str,
+            home_team=resolve_team_name(home_id) if home_id is not None else "Home",
+            home_team_id=str(home_id) if home_id is not None else None,
+            visitor_team=resolve_team_name(away_id) if away_id is not None else "Away",
+            visitor_team_id=str(away_id) if away_id is not None else None,
+            created_by=current_user.username,
+        )
+        if shot_uid:
+            game.game_uid = str(shot_uid)
+        db.add(game)
+        db.flush()  # get game.id before importing possessions into it
+
+    is_shottracker_format = "startGameClock" in first and "possessions" in first
+    if is_shottracker_format:
+        created, failed, errors = _import_shottracker_format(db, game.id, items, current_user.username)
+    else:
+        created, failed, errors = _import_generic_format(db, game.id, items, current_user.username)
+
+    db.commit()
+    db.refresh(game)
+
+    return {
+        "game": schemas.GameOut.model_validate(game).model_dump(),
+        "possessions_created": created,
+        "possessions_skipped": 0,  # no possession-level dedup yet — see docstring
+        "possessions_failed": failed,
+        "errors": errors[:10],
+    }
+
+
+@router.post("/{game_id}/import-possessions")
+def import_possessions(
+    game_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),  # admin or annotator, same as adding one by hand
+):
+    """Bulk-loads possessions (and their individual events) from a JSON file.
+    Two paths:
+    1. ShotTracker-style export (each item has startGameClock/endGameClock/
+       a nested 'possessions' event list) — parsed precisely, including real
+       events (AST/STL/FG/etc.) mapped to our fixed action codes, and shot
+       detail (type/action/contested/direction) pulled from the 'shot'
+       object's attributes list.
+    2. Anything else — falls back to a lenient field-name-alias matcher that
+       fills safe defaults for whatever it can't recognize, so a partial
+       file still imports something rather than failing outright.
+    Team names are NOT guessed from teamId — that requires knowing which
+    numeric ID is which of your two teams, which this file doesn't state.
+    Raw teamId/playerId values are kept on each event so you can fill in
+    real names while annotating, per your own workflow."""
+    game = db.query(models.Game).get(game_id)
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    raw_bytes = file.file.read()
+    try:
+        raw = json_lib.loads(raw_bytes)
+    except (json_lib.JSONDecodeError, UnicodeDecodeError):
+        raise HTTPException(status_code=400, detail="That file isn't valid JSON.")
+
+    if isinstance(raw, dict) and "possessions" in raw:
+        items = raw["possessions"]
+    elif isinstance(raw, list):
+        items = raw
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Expected a JSON array of possessions, or an object with a 'possessions' key.",
+        )
+
+    is_shottracker_format = bool(items) and isinstance(items[0], dict) and (
+        "startGameClock" in items[0] and "possessions" in items[0]
+    )
+
+    if is_shottracker_format:
+        created, skipped, errors = _import_shottracker_format(db, game_id, items, current_user.username)
+    else:
+        created, skipped, errors = _import_generic_format(db, game_id, items, current_user.username)
+
+    db.commit()
+    return {"created": created, "skipped": skipped, "errors": errors[:10]}
+
+
+# Event codes used by the real tracking data, mapped to the fixed action
+# list you use for manual entry too.
+_EVENT_ACTION_MAP = {
+    "AST": "AST", "STL": "STL", "LBTO": "LBTO",
+    "DEFENSIVE_REB": "DEFENSIVE_REB", "OFFENSIVE_REB": "OFFENSIVE_REB",
+    "FLDN": "FLDN",
+}
+_SHOT_TYPE_MAP = {
+    "JUMPSHOT": "Jumper", "LAYUP": "Layup", "DUNK": "Dunk",
+    "HOOKSHOT": "Hook Shot", "FLOATER": "Floater",
+}
+
+
+def _quarter_from_period(period):
+    if not period:
+        return 1
+    m = re.search(r"\d+", str(period))
+    if m:
+        return int(m.group())
+    return 5 if "OT" in str(period).upper() else 1
+
+
+def _import_shottracker_format(db, game_id, items, username):
+    created, skipped, errors = 0, 0, []
+
+    for i, item in enumerate(items):
+        try:
+            events_data = item.get("events") or {}
+            labeled = item.get("labeledEvents") or {}
+            shot = item.get("shot") or {}
+            attrs = shot.get("attributes") or []
+
+            def pick(*keys, source=labeled, fallback_source=events_data):
+                for k in keys:
+                    if k in source:
+                        return source[k]
+                for k in keys:
+                    if k in fallback_source:
+                        return fallback_source[k]
+                return None
+
+            offenses = labeled.get("offenses") or []
+            defenses = labeled.get("defenses") or []
+            deflected = labeled.get("passDeflectedBy") or []
+
+            lineup = item.get("lineupPlayers") or []
+            opp_lineup = item.get("opponentLineupPlayers") or []
+
+            poss = models.Possession(
+                game_id=game_id,
+                quarter=_quarter_from_period(item.get("period")),
+                clock=item.get("startGameClock") or "00:00",
+                start_time=item.get("startGameClock"),
+                end_time=item.get("endGameClock"),
+                shot_clock_end=(str(item["endShotCock"]) if item.get("endShotCock") is not None else None),
+                video_time_start=labeled.get("videoTimeMark"),
+                shot_type=next((_SHOT_TYPE_MAP[a] for a in attrs if a in _SHOT_TYPE_MAP), None),
+                shot_action="CAS" if "CAS" in attrs else ("OTD" if "OTD" in attrs else None),
+                contested=True if "GUARDED" in attrs else (False if "UNGUARDED" in attrs else None),
+                direction="Left" if "DIRECTIONLEFT" in attrs else ("Right" if "DIRECTIONRIGHT" in attrs else None),
+                passes=pick("passes"),
+                reversals=pick("ballReversals"),
+                paint_touch=pick("paintTouch"),
+                inbound_type=labeled.get("inbound"),
+                offense_scheme=", ".join(offenses) if offenses else None,
+                defense_scheme=", ".join(defenses) if defenses else None,
+                deflected_pass_by=", ".join(str(x) for x in deflected) if deflected else None,
+                # Real player names aren't in this export (only numeric IDs) — stored
+                # as "#id" placeholders, same convention used for team names, so you
+                # can swap in real names later without re-importing.
+                offense_on_court=", ".join(f"#{p}" for p in lineup) if lineup else None,
+                defense_on_court=", ".join(f"#{p}" for p in opp_lineup) if opp_lineup else None,
+                created_by=username,
+            )
+            db.add(poss)
+            db.flush()  # get poss.id before adding its events
+
+            for ev in item.get("possessions", []):
+                ptype = ev.get("possessionType")
+                is3 = ev.get("is3Point", False)
+                if ptype in ("FG", "FGA"):
+                    action = "3PT" if is3 else "2PT"
+                    result = "Make" if ptype == "FG" else "Miss"
+                elif ptype in ("FT", "FTA"):
+                    action = ptype
+                    result = "Make" if ptype == "FT" else "Miss"
+                elif ptype in _EVENT_ACTION_MAP:
+                    action = _EVENT_ACTION_MAP[ptype]
+                    result = None
+                else:
+                    continue  # unrecognized event code — skip just this sub-event, not the whole possession
+                db.add(models.PossessionEvent(
+                    possession_id=poss.id,
+                    team=str(ev.get("teamId")) if ev.get("teamId") is not None else None,
+                    player_number=str(ev.get("playerId")) if ev.get("playerId") is not None else None,
+                    action=action,
+                    result=result,
+                    created_by=username,
+                ))
+            created += 1
+        except Exception as e:
+            skipped += 1
+            errors.append({
+                "period": item.get("period"),
+                "start": item.get("startGameClock"),
+                "end": item.get("endGameClock"),
+                "error": str(e),
+            })
+
+    return created, skipped, errors
+
+
+def _import_generic_format(db, game_id, items, username):
+    # field_name -> our column name, matched after lowercasing and stripping spaces/underscores
+    ALIASES = {
+        "period": "quarter", "quarter": "quarter", "qtr": "quarter", "q": "quarter",
+        "gcstart": "start_time", "start": "start_time", "starttime": "start_time", "start_time": "start_time",
+        "gcend": "end_time", "end": "end_time", "endtime": "end_time", "end_time": "end_time",
+        "shotclockend": "shot_clock_end", "shotclock": "shot_clock_end", "endshotcock": "shot_clock_end",
+        "videotimestart": "video_time_start", "videotime": "video_time_start", "videotimemark": "video_time_start",
+        "team": "team", "teamname": "team",
+        "player": "player_number", "playernumber": "player_number", "playernum": "player_number", "number": "player_number",
+        "action": "action", "play": "action", "event": "action",
+        "result": "result", "outcome": "result",
+        "shottype": "shot_type", "shotaction": "shot_action", "contested": "contested", "direction": "direction",
+        "playtype": "play_type", "passes": "passes", "reversals": "reversals", "painttouch": "paint_touch",
+        "inbound": "inbound_type", "inboundtype": "inbound_type",
+        "offense": "offense_scheme", "offensescheme": "offense_scheme",
+        "defense": "defense_scheme", "defensescheme": "defense_scheme",
+        "offenseoncourt": "offense_on_court", "defenseoncourt": "defense_on_court",
+        "deflectedpassby": "deflected_pass_by", "deflectedpass": "deflected_pass_by",
+        "shotdefenders": "shot_defenders", "ballscreens": "ball_screens",
+        "shotx": "shot_x", "shoty": "shot_y",
+    }
+
+    def normalize_key(k):
+        return str(k).lower().replace(" ", "").replace("_", "").replace("-", "")
+
+    def map_item(item):
+        mapped = {}
+        summary_text = None
+        for k, v in item.items():
+            norm = normalize_key(k)
+            col = ALIASES.get(norm)
+            if col:
+                mapped[col] = v
+            elif norm in ("summary", "description", "note", "notes", "text", "playbyplaydescription") and isinstance(v, str):
+                summary_text = v
+
+        if isinstance(mapped.get("ball_screens"), (list, dict)):
+            mapped["ball_screens"] = json_lib.dumps(mapped["ball_screens"])
+
+        quarter_raw = mapped.pop("quarter", None)
+        try:
+            mapped["quarter"] = int(quarter_raw) if quarter_raw not in (None, "") else 1
+        except (TypeError, ValueError):
+            mapped["quarter"] = _quarter_from_period(quarter_raw)
+
+        mapped["clock"] = str(mapped.get("start_time") or mapped.get("clock") or "00:00")
+        if not mapped.get("action"):
+            mapped["action"] = summary_text or None
+
+        for numeric_field in ("passes", "reversals"):
+            if numeric_field in mapped:
+                try:
+                    mapped[numeric_field] = int(mapped[numeric_field])
+                except (TypeError, ValueError):
+                    mapped.pop(numeric_field)
+
+        return mapped
+
+    allowed_fields = set(schemas.PossessionCreate.model_fields.keys())
+    created, skipped, errors = 0, 0, []
+
+    for i, item in enumerate(items):
+        if not isinstance(item, dict):
+            skipped += 1
+            continue
+        mapped = map_item(item)
+        cleaned = {k: v for k, v in mapped.items() if k in allowed_fields}
+        try:
+            payload_obj = schemas.PossessionCreate(**cleaned)
+        except Exception as e:
+            skipped += 1
+            errors.append({
+                "period": item.get("period") or item.get("quarter") or item.get("Period"),
+                "start": item.get("startGameClock") or item.get("GC Start") or item.get("start"),
+                "end": item.get("endGameClock") or item.get("GC End") or item.get("end"),
+                "error": str(e),
+            })
+            continue
+        poss = models.Possession(game_id=game_id, **payload_obj.model_dump(), created_by=username)
+        db.add(poss)
+        created += 1
+
+    return created, skipped, errors
