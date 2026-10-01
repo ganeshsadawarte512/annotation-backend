@@ -32,9 +32,11 @@ def add_possession(
     game = db.query(models.Game).get(game_id)
     if not game:
         raise HTTPException(status_code=404, detail="Game not found")
-    poss = models.Possession(
-        game_id=game_id, **payload.model_dump(), created_by=current_user.username
-    )
+    data = payload.model_dump()
+    actions_data = data.pop("actions", [])
+    poss = models.Possession(game_id=game_id, **data, created_by=current_user.username)
+    for i, a in enumerate(actions_data):
+        poss.actions.append(models.PossessionAction(sort_order=i, **a))
     db.add(poss)
     db.commit()
     db.refresh(poss)
@@ -51,8 +53,13 @@ def update_possession(
     poss = db.query(models.Possession).get(possession_id)
     if not poss:
         raise HTTPException(status_code=404, detail="Possession not found")
-    for field, value in payload.model_dump().items():
+    data = payload.model_dump()
+    actions_data = data.pop("actions", [])
+    for field, value in data.items():
         setattr(poss, field, value)
+    poss.actions.clear()  # cascade="all, delete-orphan" removes the old rows on commit
+    for i, a in enumerate(actions_data):
+        poss.actions.append(models.PossessionAction(sort_order=i, **a))
     db.commit()
     db.refresh(poss)
     return poss
@@ -72,63 +79,31 @@ def delete_possession(
     return {"deleted": True}
 
 
-# ---------- Events (multiple plays within one possession) ----------
-
-@router.post("/possessions/{possession_id}/events", response_model=schemas.PossessionEventOut)
-def add_event(
-    possession_id: int,
-    payload: schemas.PossessionEventCreate,
+@router.delete("/games/{game_id}/possessions")
+def delete_all_possessions(
+    game_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),  # admin or annotator
+    current_user: models.User = Depends(require_admin),  # blocked for non-admins
 ):
-    poss = db.query(models.Possession).get(possession_id)
-    if not poss:
-        raise HTTPException(status_code=404, detail="Possession not found")
-    if payload.action not in models.POSSESSION_EVENT_ACTIONS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"action must be one of: {', '.join(models.POSSESSION_EVENT_ACTIONS)}",
-        )
-    event = models.PossessionEvent(
-        possession_id=possession_id, **payload.model_dump(), created_by=current_user.username
+    """Wipe every possession logged for a game — e.g. to redo a bad JSON
+    import or start a manual annotation pass over from scratch."""
+    game = db.query(models.Game).get(game_id)
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+    poss_ids = [
+        pid for (pid,) in
+        db.query(models.Possession.id).filter(models.Possession.game_id == game_id).all()
+    ]
+    if poss_ids:
+        # SQLite doesn't enforce FK cascades here, so child action rows need
+        # to be cleared explicitly before the bulk delete on possessions.
+        db.query(models.PossessionAction).filter(
+            models.PossessionAction.possession_id.in_(poss_ids)
+        ).delete(synchronize_session=False)
+    deleted = (
+        db.query(models.Possession)
+        .filter(models.Possession.game_id == game_id)
+        .delete(synchronize_session=False)
     )
-    db.add(event)
     db.commit()
-    db.refresh(event)
-    return event
-
-
-@router.put("/possession-events/{event_id}", response_model=schemas.PossessionEventOut)
-def update_event(
-    event_id: int,
-    payload: schemas.PossessionEventCreate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),  # admin or annotator
-):
-    event = db.query(models.PossessionEvent).get(event_id)
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
-    if payload.action not in models.POSSESSION_EVENT_ACTIONS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"action must be one of: {', '.join(models.POSSESSION_EVENT_ACTIONS)}",
-        )
-    for field, value in payload.model_dump().items():
-        setattr(event, field, value)
-    db.commit()
-    db.refresh(event)
-    return event
-
-
-@router.delete("/possession-events/{event_id}")
-def delete_event(
-    event_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),  # admin or annotator
-):
-    event = db.query(models.PossessionEvent).get(event_id)
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
-    db.delete(event)
-    db.commit()
-    return {"deleted": True}
+    return {"deleted": deleted}
